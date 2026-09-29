@@ -1,0 +1,7 @@
+{
+  "name": "wedding-planner",
+  "private": true,
+  "dependencies": {
+    "@netlify/blobs": "^9.1.6"
+  }
+}
