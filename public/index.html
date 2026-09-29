@@ -1,0 +1,2330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#FAF7F2" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Wedding Planner" />
+<title>Wedding Planner</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%8D%3C/text%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Jost:wght@300;400;500;600&display=swap" />
+<style>
+  html, body { margin: 0; background: #FAF7F2; }
+  .boot { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; color: #26352E; font-family: 'Cormorant Garamond', Georgia, serif; }
+  .boot-ring { font-size: 46px; animation: bootFloat 3s ease-in-out infinite; }
+  .boot-title { font-size: 30px; font-weight: 600; margin-top: 12px; }
+  .boot-slow { font-family: 'Jost', system-ui, sans-serif; font-size: 14px; color: #7D8781; margin-top: 10px; opacity: 0; animation: bootShow .4s ease 12s forwards; }
+  @keyframes bootFloat { 50% { transform: translateY(-8px); } }
+  @keyframes bootShow { to { opacity: 1; } }
+  .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; color: #26352E; font-family: 'Jost', system-ui, sans-serif; background: radial-gradient(42rem 30rem at 105% -5%, rgba(235,203,197,.5), transparent 60%), radial-gradient(38rem 28rem at -10% 105%, rgba(126,156,136,.25), transparent 60%), #FAF7F2; }
+  .gate-card { width: 100%; max-width: 360px; box-sizing: border-box; background: rgba(255,255,255,.92); border: 1px solid #EAE3D8; border-radius: 24px; padding: 32px 28px; text-align: center; box-shadow: 0 8px 24px -12px rgba(38,53,46,.18); }
+  .gate-ico { font-size: 40px; }
+  .gate h1 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 32px; font-weight: 600; line-height: 1.1; margin: 8px 0 6px; }
+  .gate p { color: #7D8781; font-size: 14px; margin: 0 0 18px; }
+  .gate input { width: 100%; box-sizing: border-box; border: 1px solid #EAE3D8; border-radius: 12px; padding: 12px 14px; font-size: 16px; font-family: inherit; outline: none; background: #fff; color: #26352E; }
+  .gate input:focus { border-color: #7E9C88; box-shadow: 0 0 0 3px rgba(126,156,136,.2); }
+  .gate-err { color: #BE5A52; font-size: 13px; min-height: 18px; margin: 8px 0; }
+  .gate button { width: 100%; border: 0; border-radius: 999px; padding: 12px; background: #4F6E5C; color: #fff; font-size: 15px; font-weight: 500; font-family: inherit; cursor: pointer; }
+  .gate button:disabled { opacity: .6; }
+</style>
+<script defer src="https://cdn.tailwindcss.com"></script>
+<script defer crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script defer crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script defer crossorigin src="https://unpkg.com/lucide-react@0.383.0/dist/umd/lucide-react.min.js"></script>
+<script defer src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+</head>
+<body>
+<div id="root">
+  <div class="boot">
+    <div class="boot-ring">💍</div>
+    <div class="boot-title">Opening your planner…</div>
+    <div class="boot-slow">Taking a while? Check your connection, then refresh the page.</div>
+  </div>
+</div>
+<noscript><div class="boot"><div class="boot-title">Please turn on JavaScript to use the planner.</div></div></noscript>
+
+<script>
+/*
+  Storage for the planner.
+  - If the Netlify Function at /api/store is deployed, everything is saved there (Netlify Blobs),
+    so both of you share one plan. It can be locked with a passcode (PLANNER_PASSCODE env var).
+  - If it isn't there (e.g. a drag-and-drop deploy), plans are saved in this browser on this device.
+*/
+(function () {
+  var API = "/api/store", PASS = "wed-passcode", MODE = "wed-mode";
+
+  // lucide-react's browser build looks for a lowercase `react` global
+  try { Object.defineProperty(window, "react", { configurable: true, get: function () { return window.React; } }); } catch (e) {}
+
+  var ls = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+    del: function (k) { try { localStorage.removeItem(k); } catch (e) {} }
+  };
+  var passHeader = function () { return encodeURIComponent(ls.get(PASS) || ""); };
+
+  /* ── Shared storage (Netlify Function + Blobs) ── */
+  function request(method, params, body) {
+    var qs = new URLSearchParams(params || {}).toString();
+    return fetch(API + (qs ? "?" + qs : ""), {
+      method: method,
+      cache: "no-store",
+      body: body,
+      keepalive: typeof body === "string" && body.length < 60000,
+      headers: { "x-planner-key": passHeader(), "content-type": "text/plain;charset=UTF-8" }
+    }).then(function (r) {
+      if (r.status === 401) { ls.del(PASS); location.reload(); throw new Error("Passcode needed"); }
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
+  var cloud = {
+    mode: "cloud",
+    get: function (key) {
+      return request("GET", { key: key }).then(function (d) { return typeof d.value === "string" ? { key: key, value: d.value, shared: true } : null; });
+    },
+    getMany: function (keys) {
+      return request("GET", { keys: keys.join(",") }).then(function (d) { return d.values || {}; });
+    },
+    set: function (key, value) {
+      return request("PUT", { key: key }, value).then(function () { return { key: key, value: value, shared: true }; });
+    },
+    "delete": function (key) {
+      return request("DELETE", { key: key }).then(function () { return { key: key, deleted: true, shared: true }; });
+    },
+    list: function (prefix) {
+      return request("GET", { prefix: prefix || "" }).then(function (d) { return { keys: d.keys || [], prefix: prefix, shared: true }; });
+    }
+  };
+
+  /* ── This-device storage (IndexedDB, falling back to localStorage) ── */
+  function openIDB() {
+    return new Promise(function (res, rej) {
+      if (!window.indexedDB) return rej(new Error("IndexedDB unavailable"));
+      var r = indexedDB.open("wedding-planner", 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore("kv"); };
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error); };
+    });
+  }
+  function idbKV(db) {
+    function run(mode, fn) {
+      return new Promise(function (res, rej) {
+        var t = db.transaction("kv", mode), q = fn(t.objectStore("kv"));
+        t.oncomplete = function () { res(q.result); };
+        t.onerror = function () { rej(t.error); };
+        t.onabort = function () { rej(t.error || new Error("Transaction aborted")); };
+      });
+    }
+    return {
+      get: function (k) { return run("readonly", function (s) { return s.get(k); }); },
+      set: function (k, v) { return run("readwrite", function (s) { return s.put(v, k); }); },
+      del: function (k) { return run("readwrite", function (s) { return s["delete"](k); }); },
+      keys: function () { return run("readonly", function (s) { return s.getAllKeys(); }); }
+    };
+  }
+  function lsKV() {
+    var P = "wedkv:";
+    return {
+      get: function (k) { return Promise.resolve(ls.get(P + k)); },
+      set: function (k, v) { return new Promise(function (res, rej) { try { localStorage.setItem(P + k, v); res(); } catch (e) { rej(e); } }); },
+      del: function (k) { ls.del(P + k); return Promise.resolve(); },
+      keys: function () {
+        var out = [];
+        try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf(P) === 0) out.push(k.slice(P.length)); } } catch (e) {}
+        return Promise.resolve(out);
+      }
+    };
+  }
+  function makeLocal(kv) {
+    return {
+      mode: "local",
+      get: function (key) { return kv.get(key).then(function (v) { return typeof v === "string" ? { key: key, value: v, shared: true } : null; }); },
+      getMany: function (keys) {
+        return Promise.all(keys.map(function (k) { return kv.get(k); })).then(function (vals) {
+          var o = {}; keys.forEach(function (k, i) { o[k] = typeof vals[i] === "string" ? vals[i] : null; }); return o;
+        });
+      },
+      set: function (key, value) { return kv.set(key, value).then(function () { return { key: key, value: value, shared: true }; }); },
+      "delete": function (key) { return kv.del(key).then(function () { return { key: key, deleted: true, shared: true }; }); },
+      list: function (prefix) {
+        return kv.keys().then(function (ks) {
+          return { keys: ks.map(String).filter(function (k) { return k.indexOf(prefix || "") === 0; }), prefix: prefix, shared: true };
+        });
+      }
+    };
+  }
+
+  /* ── Work out which storage to use ── */
+  function probe() {
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 12000);
+    return fetch(API + "?probe=1", { cache: "no-store", headers: { "x-planner-key": passHeader() }, signal: ctrl ? ctrl.signal : undefined })
+      .then(function (r) {
+        clearTimeout(timer);
+        if (r.status === 401) return { state: "locked" };
+        var isJson = (r.headers.get("content-type") || "").indexOf("json") >= 0;
+        if (r.ok && isJson) return r.json().then(function (d) { return { state: "cloud", protected: !!d["protected"] }; });
+        if (r.status === 404 || r.ok) return { state: "local" };
+        return { state: "cloud" }; // function exists but is failing: stay on shared storage so plans never split
+      })
+      .catch(function () { clearTimeout(timer); return { state: ls.get(MODE) === "cloud" ? "cloud" : "local" }; });
+  }
+
+  var attempts = 0;
+  function gate(retry) {
+    ls.del(PASS);
+    var root = document.getElementById("root");
+    root.innerHTML =
+      '<div class="gate"><form class="gate-card">' +
+      '<div class="gate-ico">💍</div><h1>Our wedding planner</h1>' +
+      '<p>Enter your passcode to open your plans.</p>' +
+      '<input type="password" autocomplete="current-password" placeholder="Passcode" aria-label="Passcode" required />' +
+      '<div class="gate-err">' + (attempts ? "That passcode didn’t work. Try again." : "") + '</div>' +
+      '<button type="submit">Open planner</button></form></div>';
+    var form = root.querySelector("form"), input = form.querySelector("input"), btn = form.querySelector("button");
+    try { input.focus(); } catch (e) {}
+    form.onsubmit = function (e) {
+      e.preventDefault();
+      var v = input.value.trim();
+      if (!v) return;
+      ls.set(PASS, v);
+      attempts++;
+      btn.disabled = true;
+      btn.textContent = "Checking…";
+      retry();
+    };
+  }
+
+  function ready(st, info) {
+    st.passProtected = !!(info && info["protected"]);
+    st.signOut = function () { ls.del(PASS); location.reload(); };
+    window.storage = st;
+    if (st.mode === "cloud") ls.set(MODE, "cloud");
+    if (st.mode === "local" && navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(function () {}); }
+  }
+
+  window.plannerReady = new Promise(function (resolve) {
+    function start() {
+      probe().then(function (p) {
+        if (p.state === "locked") return gate(start);
+        if (p.state === "cloud") { ready(cloud, p); return resolve(); }
+        openIDB().then(idbKV, function () { return lsKV(); }).then(function (kv) { ready(makeLocal(kv), p); resolve(); });
+      });
+    }
+    start();
+  });
+})();
+</script>
+
+<script type="text/babel" data-presets="react">
+(() => {
+const { useState, useEffect, useRef, createContext, useContext } = React;
+const L = window.LucideReact || {};
+
+const Ic = ({ n, size = 18, ...p }) => {
+  const C = String(n).split("|").map((k) => L[k]).find(Boolean) || L.Circle;
+  return C ? <C size={size} strokeWidth={1.8} {...p} /> : null;
+};
+
+/* ───────── helpers ───────── */
+const uid = () => Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-5);
+const pad = (n) => String(n).padStart(2, "0");
+const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const pd = (s) => { if (!s || typeof s !== "string") return null; const [y, m, d] = s.split("-").map(Number); return y && m && d ? new Date(y, m - 1, d) : null; };
+const today = () => ymd(new Date());
+const addDays = (s, n) => { const d = pd(s) || new Date(); d.setDate(d.getDate() + n); return ymd(d); };
+const diffDays = (a, b) => { const x = pd(a), y = pd(b); return x && y ? Math.round((y - x) / 864e5) : 0; };
+const fmtD = (s, o) => { const d = pd(s); return d ? d.toLocaleDateString("en-GB", o || { day: "numeric", month: "short" }) : ""; };
+const fmtLong = (s) => fmtD(s, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const fmtFull = (s) => fmtD(s, { day: "numeric", month: "short", year: "numeric" });
+const fmtTime = (t) => { if (!t) return ""; const [h, m] = t.split(":").map(Number); return isNaN(h) ? t : `${((h + 11) % 12) + 1}:${pad(m || 0)} ${h >= 12 ? "PM" : "AM"}`; };
+const relDay = (s) => {
+  const d = diffDays(today(), s);
+  if (d === 0) return "Today";
+  if (d === 1) return "Tomorrow";
+  if (d < 0) return `${-d} day${d === -1 ? "" : "s"} overdue`;
+  if (d < 7) return `In ${d} days · ${fmtD(s, { weekday: "short" })}`;
+  return fmtD(s, { weekday: "short", day: "numeric", month: "short" });
+};
+const num = (v) => { const x = parseFloat(String(v == null ? "" : v).replace(/,/g, "")); return isFinite(x) ? x : 0; };
+const fmtNum = (n) => Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
+const fmtPlain = (n) => String(Math.round(n * 100) / 100);
+const CUR = { LKR: "Rs. ", USD: "$", EUR: "€", GBP: "£", AUD: "A$", CAD: "C$", NZD: "NZ$", INR: "₹", SGD: "S$", AED: "AED " };
+const money = (n, c) => {
+  const sym = CUR[c] != null ? CUR[c] : (c || "") + " ";
+  const a = Math.abs(n || 0);
+  const s = Math.round(a) === a ? a.toLocaleString("en-US") : a.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (n < 0 ? "−" : "") + sym + s;
+};
+const PRI = ["High", "Medium", "Low"];
+const byDue = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || PRI.indexOf(a.pri) - PRI.indexOf(b.pri);
+const initials = (n) => (n || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+const normUrl = (u) => (/^https?:\/\//i.test(u) ? u : "https://" + u);
+const coupleName = (s) => (s.bride && s.groom ? `${s.bride} & ${s.groom}` : s.bride || s.groom || "Our Wedding");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ───────── data ───────── */
+const TASK_CATS = ["Planning", "Legal", "Church", "Ceremony", "Venue", "Marquee", "Attire", "Food & Cake", "Photo & Video", "Décor & Flowers", "Music", "Guests", "Beauty", "Transport", "Other"];
+const WHO = ["Both", "Bride", "Groom", "Family", "Coordinator"];
+const BUDGET_CATS = ["Ceremony & Church", "Venue & Marquee", "Catering & Drinks", "Cake", "Attire", "Rings & Jewellery", "Photo & Video", "Flowers & Décor", "Lighting & Power", "Music & Entertainment", "Stationery", "Beauty", "Transport", "Favours & Gifts", "Honeymoon", "Contingency", "Other"];
+const CAT_COLORS = ["#4F6E5C", "#B8955A", "#C4847C", "#7E9C88", "#D9B99B", "#8FA9B5", "#A68CB8", "#E3A587", "#6F8F7A", "#C9B37E", "#9BB3AB", "#D69C9C", "#94A3B8", "#B5C99A", "#E0C3A0", "#7D8781", "#C7B198"];
+const catColor = (c) => { const i = BUDGET_CATS.indexOf(c); return CAT_COLORS[(i < 0 ? 16 : i) % CAT_COLORS.length]; };
+const VENDOR_CATS = ["Church", "Reception venue", "Marquee hire", "Catering", "Cake", "Photography", "Videography", "Florist & décor", "Lighting & sound", "Music / DJ / Band", "Choir / Organist", "Bridal wear", "Groom's wear", "Hair & makeup", "Transport", "Stationery", "Other"];
+const VENUE_CATS = ["Church", "Reception venue", "Marquee hire"];
+const V_STATUS = ["Booked", "Shortlisted", "Contacted", "Researching", "Declined"];
+const V_TONE = { Booked: ["var(--sl)", "var(--sd)"], Shortlisted: ["var(--gl)", "var(--gd)"], Contacted: ["#EEF2F6", "#5B6B7F"], Researching: ["#F1EEE8", "var(--mut)"], Declined: ["var(--rl)", "var(--red)"] };
+const V_TO_B = { Church: "Ceremony & Church", "Reception venue": "Venue & Marquee", "Marquee hire": "Venue & Marquee", Catering: "Catering & Drinks", Cake: "Cake", Photography: "Photo & Video", Videography: "Photo & Video", "Florist & décor": "Flowers & Décor", "Lighting & sound": "Lighting & Power", "Music / DJ / Band": "Music & Entertainment", "Choir / Organist": "Music & Entertainment", "Bridal wear": "Attire", "Groom's wear": "Attire", "Hair & makeup": "Beauty", Transport: "Transport", Stationery: "Stationery" };
+const PLANS = { undecided: "Still deciding", church: "Church ceremony, then marquee reception", venue: "Ceremony & reception at the same venue" };
+const VERSES = [
+  ["Love is patient and is kind; love doesn't envy. Love doesn't brag, is not proud.", "1 Corinthians 13:4"],
+  ["A threefold cord is not quickly broken.", "Ecclesiastes 4:12"],
+  ["What therefore God hath joined together, let not man put asunder.", "Mark 10:9"],
+  ["Many waters cannot quench love, neither can the floods drown it.", "Song of Solomon 8:7"],
+  ["Whither thou goest, I will go; and where thou lodgest, I will lodge.", "Ruth 1:16"],
+  ["Above all these things, walk in love, which is the bond of perfection.", "Colossians 3:14"],
+  ["In nothing be anxious, but in everything, by prayer and petition with thanksgiving, let your requests be made known to God.", "Philippians 4:6"],
+  ["Trust in the LORD with all thine heart; and lean not unto thine own understanding.", "Proverbs 3:5"],
+  ["Let all that you do be done in love.", "1 Corinthians 16:14"],
+  ["We love him, because he first loved us.", "1 John 4:19"],
+];
+const VERSE_DAY = ["This is the day which the LORD hath made; we will rejoice and be glad in it.", "Psalm 118:24"];
+// [title, category, when (fraction of time left, or "dN" = N days before), priority, who, notes]
+const SEED_TASKS = [
+  ["Decide ceremony format: church + marquee reception, or all at one venue", "Planning", 0, "High", "Both", "This one choice drives the venue bookings, day timeline and budget."],
+  ["Check marriage registration requirements & give notice to the registrar", "Legal", 0, "High", "Both", "Notice periods and documents (IDs, birth certificates) vary. Check early so nothing blocks the date."],
+  ["Meet the priest / pastor and book the church", "Church", 0.04, "High", "Both", "Ask about marriage preparation, available times, flower & photography rules and the order of service."],
+  ["Visit & shortlist reception venues that allow a marquee", "Venue", 0.04, "High", "Both", "Check level ground, truck access, power, toilets, parking and a wet-weather option."],
+  ["Book the reception venue", "Venue", 0.08, "High", "Both", ""],
+  ["Book marquee hire (flooring, sidewalls, lighting)", "Marquee", 0.1, "High", "Both", "Confirm set-up & take-down times, clear sidewalls for rain or wind, and dance floor size."],
+  ["Book caterer & arrange a menu tasting", "Food & Cake", 0.1, "High", "Both", "Ask about kitchen tent needs, service staff, crockery and dietary options."],
+  ["Book photographer & videographer", "Photo & Video", 0.12, "High", "Both", ""],
+  ["Finalise guest list & send invitations", "Guests", 0.12, "High", "Both", "On a short timeline, digital invites plus a phone call work best."],
+  ["Choose & order the bride's dress", "Attire", 0.14, "High", "Bride", "Leave time for alterations and at least two fittings."],
+  ["Buy or order wedding rings", "Attire", 0.16, "High", "Both", ""],
+  ["Groom's suit & groomsmen's attire", "Attire", 0.2, "Medium", "Groom", ""],
+  ["Bridesmaids' dresses", "Attire", 0.2, "Medium", "Bride", ""],
+  ["Book florist: bouquets, church flowers & table centrepieces", "Décor & Flowers", 0.22, "Medium", "Both", ""],
+  ["Book music: church choir / organist and DJ or band for the reception", "Music", 0.25, "Medium", "Both", ""],
+  ["Order the wedding cake", "Food & Cake", 0.28, "Medium", "Both", ""],
+  ["Arrange generator, power & lighting for the marquee", "Marquee", 0.3, "High", "Groom", "Fairy or festoon lights, path lighting, and a backup generator."],
+  ["Plan the rain & wind backup for outdoor areas", "Marquee", 0.32, "High", "Both", "Sidewalls, guest umbrellas, a covered walkway and flooring over grass."],
+  ["Choose readings, hymns & vows with the priest", "Ceremony", 0.4, "Medium", "Both", ""],
+  ["Hair & makeup trial", "Beauty", 0.42, "Medium", "Bride", ""],
+  ["Arrange transport: bridal car & guest travel between church and venue", "Transport", 0.48, "Medium", "Groom", ""],
+  ["Plan the honeymoon", "Planning", 0.5, "Low", "Both", ""],
+  ["Print order of service, place cards & seating chart", "Guests", 0.6, "Medium", "Both", ""],
+  ["Chase RSVPs & confirm final headcount with the caterer", "Guests", 0.68, "High", "Both", ""],
+  ["Final dress & suit fittings", "Attire", 0.75, "Medium", "Both", ""],
+  ["Give the day-of run sheet to a coordinator", "Planning", "d4", "Medium", "Both", "Pick someone calm who can handle vendors so you don't have to."],
+  ["Confirm times & addresses with every vendor", "Planning", "d3", "High", "Both", ""],
+  ["Final balance payments & vendor envelopes", "Planning", "d2", "High", "Groom", ""],
+  ["Wedding rehearsal at the church", "Church", "d1", "Medium", "Both", ""],
+  ["Pack the wedding-day emergency kit", "Planning", "d1", "Low", "Bride", "See the checklist on the Wedding Day page."],
+];
+const TL_CHURCH = [
+  ["07:30", "Hair & makeup begins", "Bride's home", "Bride & bridesmaids"], ["09:30", "Groom & groomsmen get ready", "Groom's home", ""],
+  ["10:30", "Photographer arrives for getting-ready shots", "", "Photographer"], ["12:30", "Bride dressed · family photos at home", "Bride's home", ""],
+  ["13:30", "Guests arrive & are seated", "Church", "Ushers"], ["13:45", "Groom & best man wait at the altar", "Church", ""],
+  ["14:00", "Processional · ceremony begins", "Church", "Priest / Pastor"], ["14:15", "Readings & homily", "Church", ""],
+  ["14:35", "Vows & exchange of rings", "Church", ""], ["14:50", "Signing of the register", "Church", ""],
+  ["15:00", "Recessional & confetti", "Church", ""], ["15:15", "Family & group photos", "Church grounds", "Photographer"],
+  ["16:30", "Guests arrive at the marquee · welcome drinks", "Reception venue", "Caterer"], ["17:30", "Couple portraits at golden hour", "Reception venue", "Photographer"],
+  ["18:30", "Grand entrance of the newlyweds", "Marquee", "MC"], ["18:45", "Welcome & grace before the meal", "Marquee", "MC / Priest"],
+  ["19:00", "Dinner is served", "Marquee", "Caterer"], ["20:00", "Toasts & speeches", "Marquee", ""], ["20:30", "Cake cutting", "Marquee", ""],
+  ["20:45", "First dance", "Marquee", "DJ / Band"], ["21:00", "Dancing & celebration", "Marquee", ""], ["22:30", "Send-off", "Reception venue", ""],
+];
+const TL_VENUE = [
+  ["08:30", "Hair & makeup begins", "Bridal suite", "Bride & bridesmaids"], ["11:00", "Groom & groomsmen get ready", "", ""],
+  ["12:00", "Photographer arrives for getting-ready shots", "", "Photographer"], ["14:00", "Final décor check · ceremony area & marquee", "Venue", "Coordinator"],
+  ["15:30", "Guests arrive · seated for the garden ceremony", "Venue garden", "Ushers"], ["16:00", "Processional · ceremony begins", "Venue garden", "Priest / Pastor"],
+  ["16:15", "Readings, vows & exchange of rings", "Venue garden", ""], ["16:40", "Signing of the register", "Venue garden", ""],
+  ["16:50", "Recessional & confetti", "Venue garden", ""], ["17:00", "Welcome drinks & canapés", "Lawn", "Caterer"],
+  ["17:15", "Family & group photos", "Venue", "Photographer"], ["17:45", "Couple portraits at golden hour", "Venue", "Photographer"],
+  ["18:30", "Grand entrance into the marquee", "Marquee", "MC"], ["18:45", "Welcome & grace before the meal", "Marquee", ""],
+  ["19:00", "Dinner is served", "Marquee", "Caterer"], ["20:00", "Toasts & speeches", "Marquee", ""], ["20:30", "Cake cutting", "Marquee", ""],
+  ["20:45", "First dance", "Marquee", "DJ / Band"], ["21:00", "Dancing & celebration", "Marquee", ""], ["22:30", "Send-off", "Venue", ""],
+];
+const mkTL = (plan) => (plan === "venue" ? TL_VENUE : TL_CHURCH).map(([time, title, place, who]) => ({ id: uid(), time, title, place, who, notes: "" }));
+const KIT = ["Umbrellas for guests", "Insect repellent & citronella candles", "Sunscreen", "Safety pins & mini sewing kit", "Stain-remover pen", "Phone chargers & power bank", "Tissues & blotting papers", "Water & snacks for the couple", "Comfortable spare shoes", "Wedding rings (with the best man!)", "Marriage documents & IDs", "Vendor payment envelopes", "Printed run sheet & vendor contacts", "Torch / flashlight", "Extension cords & tape"];
+const SEED_BOARDS = [["bride", "Bride's Dress", "👰"], ["bridesmaids", "Bridesmaids", "💐"], ["groom", "Groom's Attire", "🤵"], ["groomsmen", "Groomsmen", "👔"], ["church", "Church & Ceremony", "⛪"], ["venue", "Reception Venue", "🏡"], ["marquee", "Marquee & Tent", "⛺"], ["tables", "Table Décor", "🕯️"], ["flowers", "Flowers & Bouquets", "🌸"], ["cake", "Cake", "🎂"], ["lighting", "Lighting", "✨"], ["beauty", "Hair & Makeup", "💄"], ["stationery", "Invitations", "💌"], ["rings", "Rings", "💍"], ["other", "Other Ideas", "📌"]];
+const EMOJIS = ["👰", "🤵", "💐", "👔", "⛪", "🏡", "⛺", "🕯️", "🌸", "🎂", "✨", "💄", "💌", "💍", "📌", "🎶", "🚗", "🍽️", "🥂", "🎁", "🌿", "📸", "🌙", "👗"];
+const DEF_PALETTE = ["#7E9C88", "#F5EDDF", "#EBCBC5", "#B8955A", "#FFFFFF"];
+const COMMON_COSTS = [["Church fees & donation", "Ceremony & Church"], ["Reception venue hire", "Venue & Marquee"], ["Marquee hire", "Venue & Marquee"], ["Catering", "Catering & Drinks"], ["Drinks", "Catering & Drinks"], ["Wedding cake", "Cake"], ["Bride's dress", "Attire"], ["Groom's suit", "Attire"], ["Bridesmaids' dresses", "Attire"], ["Wedding rings", "Rings & Jewellery"], ["Photographer", "Photo & Video"], ["Videographer", "Photo & Video"], ["Flowers & bouquets", "Flowers & Décor"], ["Table décor", "Flowers & Décor"], ["Lighting & generator", "Lighting & Power"], ["DJ / band", "Music & Entertainment"], ["Choir / organist", "Music & Entertainment"], ["Invitations", "Stationery"], ["Hair & makeup", "Beauty"], ["Bridal car", "Transport"], ["Guest favours", "Favours & Gifts"], ["Contingency (about 10%)", "Contingency"]];
+const DEF_SETTINGS = { bride: "", groom: "", date: "2026-10-16", time: "14:00", currency: "LKR", plan: "undecided", setupDone: false };
+
+const seedTasks = (w) => {
+  const t = today(), span = Math.max(0, diffDays(t, w));
+  return SEED_TASKS.map(([title, cat, p, pri, who, notes]) => {
+    let due;
+    if (typeof p === "string") { due = addDays(w, -parseInt(p.slice(1), 10)); if (diffDays(t, due) < 0) due = t; }
+    else due = addDays(t, Math.round(p * span));
+    return { id: uid(), title, cat, due, pri, who, notes, done: false };
+  });
+};
+// Re-plan open task dates when the wedding date moves
+const respace = (tasks, oldW, newW) => {
+  const t = today(), oldSpan = diffDays(t, oldW), newSpan = diffDays(t, newW);
+  return tasks.map((x) => {
+    if (x.done || !x.due) return x;
+    const before = diffDays(x.due, oldW);
+    let due;
+    if (before >= 0 && before <= 7) due = addDays(newW, -before);
+    else if (oldSpan > 0 && newSpan > 0) due = addDays(t, Math.round(Math.min(1, Math.max(0, diffDays(t, x.due) / oldSpan)) * newSpan));
+    else due = addDays(x.due, diffDays(oldW, newW));
+    if (diffDays(t, due) < 0) due = t;
+    return { ...x, due };
+  });
+};
+
+/* ───────── stats ───────── */
+const cost = (i) => (num(i.actual) > 0 ? num(i.actual) : num(i.est));
+const budgetStats = (b) => {
+  const total = b.funds.reduce((a, f) => a + num(f.amount), 0);
+  const committed = b.items.reduce((a, i) => a + cost(i), 0);
+  const paid = b.items.reduce((a, i) => a + num(i.paid), 0);
+  const byCat = {};
+  b.items.forEach((i) => { const c = i.cat || "Other"; byCat[c] = (byCat[c] || 0) + cost(i); });
+  return { total, committed, paid, remaining: total - committed, due: Math.max(0, committed - paid), byCat };
+};
+const heads = (g) => Math.max(1, parseInt(g.count, 10) || 1);
+const guestStats = (gs) => {
+  const n = (f) => gs.filter(f).reduce((a, g) => a + heads(g), 0);
+  const r = (g) => g.rsvp || "Pending";
+  return { parties: gs.length, invited: n(() => true), yes: n((g) => r(g) === "Yes"), no: n((g) => r(g) === "No"), pending: n((g) => r(g) === "Pending"), bride: n((g) => g.side === "Bride"), groom: n((g) => g.side === "Groom"), reception: n((g) => r(g) === "Yes" && g.invite !== "Ceremony"), ceremony: n((g) => r(g) === "Yes" && g.invite !== "Reception") };
+};
+const groupPending = (p, t) => {
+  const g = { o: [], w: [], n: [], l: [], x: [] };
+  p.forEach((x) => { if (!x.due) return g.x.push(x); const d = diffDays(t, x.due); (d < 0 ? g.o : d <= 7 ? g.w : d <= 21 ? g.n : g.l).push(x); });
+  return [["Overdue", g.o], ["Next 7 days", g.w], ["In 1–3 weeks", g.n], ["Later", g.l], ["No date set", g.x]].filter(([, a]) => a.length);
+};
+// Safe calculator (no eval)
+const OPS = "+−×÷";
+const evalExpr = (s) => {
+  if (!s) return null;
+  let a = s.match(/(\d+\.?\d*|\.\d+|[+−×÷])/g);
+  if (!a) return null;
+  if (a[0] === "−") { a.shift(); if (!a.length || OPS.includes(a[0])) return null; a[0] = String(-parseFloat(a[0])); }
+  while (a.length && OPS.includes(a[a.length - 1])) a.pop();
+  if (!a.length) return null;
+  const vals = [parseFloat(a[0])], ops = [];
+  for (let i = 1; i < a.length; i += 2) {
+    const op = a[i], v = parseFloat(a[i + 1]);
+    if (isNaN(v)) return null;
+    if (op === "×") vals[vals.length - 1] *= v;
+    else if (op === "÷") vals[vals.length - 1] = v === 0 ? NaN : vals[vals.length - 1] / v;
+    else { ops.push(op); vals.push(v); }
+  }
+  let r = vals[0];
+  ops.forEach((op, i) => { r = op === "+" ? r + vals[i + 1] : r - vals[i + 1]; });
+  return isFinite(r) ? r : null;
+};
+
+/* ───────── images ───────── */
+const readAsDataURL = (f) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+const loadImage = (src) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
+const compressImage = async (file, max = 1200, q = 0.78) => {
+  const im = await loadImage(await readAsDataURL(file));
+  let w = im.naturalWidth || im.width, h = im.naturalHeight || im.height;
+  const s = Math.min(1, max / Math.max(w, h)); w = Math.round(w * s); h = Math.round(h * s);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h); ctx.drawImage(im, 0, 0, w, h);
+  let out = c.toDataURL("image/jpeg", q);
+  if (out.length > 3.5e6) out = c.toDataURL("image/jpeg", 0.55);
+  return out;
+};
+
+/* ───────── storage ───────── */
+const PFX = "wed:";
+const KEYS = { settings: "wed:settings", tasks: "wed:tasks", budget: "wed:budget", guests: "wed:guests", vendors: "wed:vendors", timeline: "wed:timeline", mood: "wed:mood" };
+const IMGK = (id) => "wed:img:" + id;
+const store = () => (typeof window !== "undefined" && window.storage ? window.storage : null);
+const isLocal = () => { const st = store(); return !!(st && st.mode === "local"); };
+// Read every section in one go (one request when the storage supports it)
+const readAll = async (st) => {
+  const keys = Object.values(KEYS);
+  if (st.getMany) return st.getMany(keys);
+  const r = await st.list(PFX, true);
+  const have = ((r && r.keys) || []).map((k) => (typeof k === "string" ? k : k && k.key));
+  const out = {};
+  await Promise.all(keys.map(async (k) => {
+    if (!have.includes(k)) { out[k] = null; return; }
+    const res = await st.get(k, true);
+    out[k] = res && typeof res.value === "string" ? res.value : null;
+  }));
+  return out;
+};
+const FRESH = {
+  settings: () => ({ ...DEF_SETTINGS }),
+  tasks: () => seedTasks(DEF_SETTINGS.date),
+  budget: () => ({ funds: [], items: [] }),
+  guests: () => [],
+  vendors: () => [],
+  timeline: () => ({ items: mkTL("church"), kit: KIT.map((text) => ({ id: uid(), text, done: false })) }),
+  mood: () => ({ boards: SEED_BOARDS.map(([id, name, emoji]) => ({ id, name, emoji })), items: [], palette: [...DEF_PALETTE] }),
+};
+const BASE = { settings: () => ({ ...DEF_SETTINGS }), tasks: () => [], budget: () => ({ funds: [], items: [] }), guests: () => [], vendors: () => [], timeline: () => ({ items: [], kit: [] }), mood: () => ({ boards: [], items: [], palette: [] }) };
+const normalize = (sec, v) => { const d = BASE[sec](); if (Array.isArray(d)) return Array.isArray(v) ? v : d; return { ...d, ...(v && typeof v === "object" && !Array.isArray(v) ? v : {}) }; };
+
+/* ───────── styles ───────── */
+const CSS = `
+.wp{--iv:#FAF7F2;--ink:#26352E;--mut:#7D8781;--sage:#7E9C88;--sd:#4F6E5C;--sl:#E8F0EA;--gold:#B8955A;--gl:#F5EDDF;--gd:#8A6B3A;--bd:#B9756D;--bl:#FBEFEC;--line:#EAE3D8;--red:#BE5A52;--rl:#FBEAE8;font-family:'Jost',ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:var(--iv);min-height:100vh;-webkit-font-smoothing:antialiased;position:relative;isolation:isolate;-webkit-tap-highlight-color:transparent}
+.wp .serif{font-family:'Cormorant Garamond','Playfair Display',Georgia,serif}
+.wp button{cursor:pointer}
+.wp-bg{position:fixed;inset:0;pointer-events:none;z-index:-1;background:radial-gradient(42rem 30rem at 105% -5%,rgba(235,203,197,.5),transparent 60%),radial-gradient(38rem 28rem at -10% 105%,rgba(126,156,136,.25),transparent 60%)}
+.wp-card{background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:20px;box-shadow:0 1px 2px rgba(38,53,46,.04),0 8px 24px -12px rgba(38,53,46,.12);transition:transform .2s ease,box-shadow .2s ease}
+.wp-card.hov:hover{transform:translateY(-2px);box-shadow:0 2px 4px rgba(38,53,46,.05),0 18px 34px -14px rgba(38,53,46,.22)}
+.wp-hero{background:linear-gradient(135deg,#3B5647 0%,#56796A 55%,#7E9C88 100%);color:#FBF6EC;border-radius:28px;position:relative;overflow:hidden;box-shadow:0 20px 40px -20px rgba(59,86,71,.6)}
+.wp-hero .gold{color:#EBD6A8}
+.wp-link{color:var(--sd);font-weight:500}
+.wp-link:hover{text-decoration:underline}
+.wp-mut{color:var(--mut)}
+.wp-btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;border-radius:999px;padding:.62rem 1.1rem;font-size:.9rem;font-weight:500;transition:all .15s ease;border:1px solid transparent;white-space:nowrap;line-height:1.1}
+.wp-btn:active{transform:scale(.97)}
+.wp-btn-primary{background:var(--sd);color:#fff}.wp-btn-primary:hover{background:#3F5B4B}
+.wp-btn-ghost{background:rgba(255,255,255,.6);color:var(--ink);border-color:var(--line)}.wp-btn-ghost:hover{background:#fff}
+.wp-btn-soft{background:var(--sl);color:var(--sd)}.wp-btn-soft:hover{background:#DCE8DF}
+.wp-btn-danger{background:var(--rl);color:var(--red)}
+.wp-btn-blush{background:var(--bl);color:var(--bd);border-color:#F1D9D4}
+.wp-btn-sm{padding:.42rem .75rem;font-size:.8rem}
+.wp-icon-btn{width:38px;height:38px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:var(--mut);transition:all .15s;flex-shrink:0}
+.wp-icon-btn:hover{background:var(--sl);color:var(--sd)}
+.wp-input{width:100%;border:1px solid var(--line);background:#fff;border-radius:12px;padding:.65rem .8rem;font-size:16px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;font-family:inherit}
+.wp-input:focus{border-color:var(--sage);box-shadow:0 0 0 3px rgba(126,156,136,.2)}
+select.wp-input{-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237D8781' stroke-width='2.2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .75rem center;padding-right:2.1rem}
+textarea.wp-input{resize:vertical;min-height:84px;line-height:1.45}
+input[type=date].wp-input,input[type=time].wp-input{display:block;min-height:46px;text-align:left}
+.wp-label{display:block;font-size:.7rem;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);margin-bottom:.35rem;font-weight:500}
+.wp-chip{display:inline-flex;align-items:center;gap:.3rem;padding:.18rem .6rem;border-radius:999px;font-size:.72rem;font-weight:500;background:var(--gl);color:var(--gd);white-space:nowrap}
+.wp-pill{display:inline-flex;align-items:center;gap:.35rem;padding:.45rem .9rem;border-radius:999px;font-size:.84rem;border:1px solid var(--line);background:rgba(255,255,255,.75);color:var(--ink);white-space:nowrap;transition:all .15s;flex-shrink:0}
+.wp-pill.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.wp-seg{display:inline-flex;background:#EEE8DE;border-radius:999px;padding:3px;flex-shrink:0}
+.wp-seg button{padding:.42rem .85rem;border-radius:999px;font-size:.8rem;color:var(--mut);transition:all .15s;white-space:nowrap}
+.wp-seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.wp-scroll-x{overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}.wp-scroll-x::-webkit-scrollbar{display:none}
+.wp-clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.wp-clamp3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.wp-fade{animation:wpFade .38s ease both}
+@keyframes wpFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.wp-overlay{position:fixed;inset:0;background:rgba(28,38,33,.45);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:60;display:flex;align-items:flex-end;justify-content:center;animation:wpIn .2s ease}
+@media(min-width:768px){.wp-overlay{align-items:center;padding:1.5rem}}
+@keyframes wpIn{from{opacity:0}to{opacity:1}}
+.wp-sheet{background:var(--iv);width:100%;max-width:560px;max-height:92vh;display:flex;flex-direction:column;border-radius:24px 24px 0 0;animation:wpUp .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 -10px 40px rgba(0,0,0,.15);overflow:hidden}
+@media(min-width:768px){.wp-sheet{border-radius:24px}}
+@keyframes wpUp{from{transform:translateY(40px);opacity:.6}to{transform:none;opacity:1}}
+.wp-sheet-body{overflow-y:auto;padding:1.1rem 1.25rem;-webkit-overflow-scrolling:touch}
+.wp-bottom{position:fixed;bottom:0;left:0;right:0;z-index:40;background:rgba(250,247,242,.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.wp-side{position:fixed;top:0;bottom:0;left:0;width:256px;z-index:30;border-right:1px solid var(--line);background:rgba(255,255,255,.6);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);overflow-y:auto}
+.wp-nav-item{display:flex;align-items:center;gap:.75rem;padding:.66rem .9rem;border-radius:14px;color:var(--mut);font-size:.93rem;transition:all .15s;width:100%;text-align:left}
+.wp-nav-item:hover{background:rgba(126,156,136,.12);color:var(--ink)}
+.wp-nav-item.on{background:var(--ink);color:#fff}
+.wp-badge{min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--red);color:#fff;font-size:.7rem;display:inline-flex;align-items:center;justify-content:center;font-weight:600}
+.wp-nav-item.on .wp-badge{background:#fff;color:var(--red)}
+.wp-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:.6rem 0 .5rem;font-size:.68rem;color:var(--mut);position:relative}
+.wp-tab.on{color:var(--sd);font-weight:500}
+.wp-tab.on::before{content:"";position:absolute;top:0;left:32%;right:32%;height:2.5px;border-radius:3px;background:var(--sd)}
+.wp-check{width:24px;height:24px;border-radius:999px;border:1.8px solid #C9CFC9;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;color:#fff;background:#fff}
+.wp-check.on{background:var(--sage);border-color:var(--sage);animation:wpPop .3s ease}
+.wp-check:hover{border-color:var(--sage)}
+@keyframes wpPop{50%{transform:scale(1.2)}}
+.wp-row{transition:background .15s}.wp-row:hover{background:rgba(126,156,136,.07)}
+.wp-masonry{column-count:2;column-gap:12px}
+@media(min-width:768px){.wp-masonry{column-count:3}}
+@media(min-width:1200px){.wp-masonry{column-count:4}}
+.wp-masonry>*{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:12px}
+.wp-sq{aspect-ratio:1/1}.wp-43{aspect-ratio:4/3}
+.wp-img-card{position:relative;border-radius:16px;overflow:hidden;background:#EFEAE1;display:block;width:100%}
+.wp-img-card img{width:100%;display:block;transition:transform .5s ease}
+.wp-img-card:hover img{transform:scale(1.04)}
+.wp-img-actions{position:absolute;top:8px;right:8px;display:flex;gap:6px;opacity:0;transition:opacity .2s}
+.wp-img-card:hover .wp-img-actions{opacity:1}
+@media(hover:none){.wp-img-actions{opacity:1}}
+.wp-glass{width:32px;height:32px;border-radius:999px;background:rgba(255,255,255,.9);display:inline-flex;align-items:center;justify-content:center;color:var(--ink)}
+.wp-toast{position:fixed;left:50%;transform:translateX(-50%);bottom:92px;z-index:95;background:var(--ink);color:#fff;padding:.7rem 1.15rem;border-radius:999px;font-size:.88rem;box-shadow:0 10px 30px rgba(0,0,0,.22);animation:wpToast .3s ease;max-width:90vw;text-align:center}
+@media(min-width:768px){.wp-toast{bottom:28px}}
+@keyframes wpToast{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+.wp-bar{border-radius:999px;background:#EEE8DE;overflow:hidden;position:relative}
+.wp-bar>span{position:absolute;left:0;top:0;bottom:0;border-radius:999px;transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.wp-key{height:52px;border-radius:14px;background:#fff;border:1px solid var(--line);font-size:1.2rem;font-weight:500;transition:all .1s;color:var(--ink);display:flex;align-items:center;justify-content:center}
+.wp-key:active{transform:scale(.94);background:var(--sl)}
+.wp-key.op{background:var(--gl);color:var(--gd)}.wp-key.eq{background:var(--sd);color:#fff;border-color:var(--sd)}.wp-key.fn{color:var(--mut)}
+.wp-screen{border-radius:18px;padding:.9rem 1rem;background:linear-gradient(135deg,#26352E,#3F5B4B);color:#FBF6EC}
+.wp-shimmer{background:linear-gradient(90deg,#EFEAE1 0%,#F7F3EC 50%,#EFEAE1 100%);background-size:200% 100%;animation:wpSh 1.4s infinite}
+@keyframes wpSh{from{background-position:200% 0}to{background-position:-200% 0}}
+.wp-float{animation:wpFloat 7s ease-in-out infinite}
+@keyframes wpFloat{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-8px) rotate(2deg)}}
+.wp-spin{animation:wpSpin 1s linear infinite}@keyframes wpSpin{to{transform:rotate(360deg)}}
+.wp-lightbox{position:fixed;inset:0;z-index:70;background:rgba(20,26,23,.94);display:flex;flex-direction:column}
+@media(min-width:900px){.wp-lightbox{flex-direction:row}}
+.wp-lb-btn{position:absolute;width:44px;height:44px;border-radius:999px;background:rgba(255,255,255,.14);color:#fff;display:flex;align-items:center;justify-content:center}
+.wp-lb-btn:hover{background:rgba(255,255,255,.26)}
+.wp-lb-panel{background:var(--iv);padding:1.1rem 1.25rem calc(1.1rem + env(safe-area-inset-bottom));max-height:48vh;overflow-y:auto;border-radius:22px 22px 0 0}
+@media(min-width:900px){.wp-lb-panel{width:380px;max-height:none;height:100%;border-radius:0}}
+.wp-ico{width:30px;height:30px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:var(--sl);color:var(--sd);flex-shrink:0}
+.wp-ico[data-tone=gold]{background:var(--gl);color:var(--gd)}.wp-ico[data-tone=blush]{background:var(--bl);color:var(--bd)}
+.wp-alert{display:flex;align-items:center;gap:.5rem;padding:.55rem .8rem;border-radius:12px;background:var(--rl);color:var(--red);font-size:.85rem}
+.wp-note{background:var(--gl);color:#6E5530;border-radius:14px;padding:.7rem .9rem;font-size:.86rem;line-height:1.45}
+.wp-dot{width:18px;height:18px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.wp-avatar{width:38px;height:38px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:.76rem;font-weight:600;flex-shrink:0}
+.wp-drop{border:2px dashed #D6CEC0;border-radius:18px;transition:all .2s;background:rgba(255,255,255,.55);color:var(--mut)}
+.wp-drop:hover,.wp-drop.on{border-color:var(--sage);background:var(--sl);color:var(--sd)}
+.wp-dragging{outline:2px dashed var(--sage);outline-offset:8px;border-radius:20px}
+.wp-swatch{width:46px;height:46px;border-radius:999px;border:3px solid #fff;box-shadow:0 0 0 1px var(--line),0 4px 10px rgba(0,0,0,.08);position:relative;cursor:pointer;display:block;overflow:hidden}
+.wp-swatch-x{position:absolute;top:-4px;right:-4px;width:19px;height:19px;border-radius:999px;background:#fff;border:1px solid var(--line);font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;color:var(--mut);z-index:2}
+.wp-emo{width:40px;height:40px;border-radius:12px;font-size:20px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:#fff}
+.wp-emo.on{border-color:var(--sd);background:var(--sl)}
+.wp-sr{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0)}
+.wp-table{width:100%;border-collapse:collapse;font-size:.85rem}
+.wp-table th{text-align:left;font-weight:500;color:var(--mut);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;padding:.5rem .6rem;border-bottom:1px solid var(--line);white-space:nowrap}
+.wp-table td{padding:.6rem;border-bottom:1px solid var(--line);white-space:nowrap}
+.num{font-variant-numeric:tabular-nums}
+`;
+
+/* ───────── context & primitives ───────── */
+const Ctx = createContext(null);
+const useApp = () => useContext(Ctx);
+const Card = ({ className = "", children, style, onClick }) => <div className={`wp-card ${className}`} style={style} onClick={onClick}>{children}</div>;
+const Btn = ({ kind = "primary", className = "", children, ...p }) => <button className={`wp-btn wp-btn-${kind} ${className}`} {...p}>{children}</button>;
+const Field = ({ label, hint, children, className = "" }) => (
+  <label className={`block ${className}`}><span className="wp-label">{label}</span>{children}{hint && <span className="block text-xs wp-mut mt-1 leading-snug">{hint}</span>}</label>
+);
+const Seg = ({ value, onChange, options }) => (
+  <div className="wp-seg">{options.map(([v, l]) => <button key={v} className={value === v ? "on" : ""} onClick={() => onChange(v)}>{l}</button>)}</div>
+);
+const Bar = ({ v, color = "var(--sage)", h = 6, v2, color2 }) => (
+  <div className="wp-bar" style={{ height: h }}>
+    {v2 != null && <span style={{ width: `${Math.min(100, Math.max(0, v2 * 100))}%`, background: color2 }} />}
+    <span style={{ width: `${Math.min(100, Math.max(0, v * 100))}%`, background: color }} />
+  </div>
+);
+const Donut = ({ parts, size = 150, thick = 18, children }) => {
+  const total = parts.reduce((a, p) => a + Math.max(0, p.v), 0);
+  let acc = 0;
+  const stops = total > 0 ? parts.filter((p) => p.v > 0).map((p) => { const s = (acc / total) * 360; acc += p.v; return `${p.c} ${s}deg ${(acc / total) * 360}deg`; }).join(",") : "#EEE8DE 0deg 360deg";
+  return (
+    <div style={{ width: size, height: size, borderRadius: "50%", background: `conic-gradient(${stops})`, position: "relative", flexShrink: 0 }}>
+      <div style={{ position: "absolute", inset: thick, borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", textAlign: "center" }}>{children}</div>
+    </div>
+  );
+};
+const Ring = ({ pct, size = 64, stroke = 6, children }) => {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  return (
+    <div style={{ width: size, height: size, position: "relative", flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,.18)" strokeWidth={stroke} fill="none" />
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="#EBD6A8" strokeWidth={stroke} fill="none" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(1, Math.max(0, pct)))} style={{ transition: "stroke-dashoffset .9s ease" }} />
+      </svg>
+      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{children}</div>
+    </div>
+  );
+};
+const Empty = ({ icon, title, text, children }) => (
+  <div className="text-center py-10 px-4">
+    <div className="mx-auto mb-3 flex items-center justify-center" style={{ width: 56, height: 56, borderRadius: 999, background: "var(--gl)", color: "var(--gd)" }}><Ic n={icon} size={24} /></div>
+    <div className="serif text-2xl font-semibold">{title}</div>
+    {text && <p className="text-sm wp-mut mt-1 max-w-sm mx-auto">{text}</p>}
+    {children && <div className="mt-4 flex justify-center gap-2 flex-wrap">{children}</div>}
+  </div>
+);
+const Stars = ({ value = 0, onChange, size = 16 }) => (
+  <div className="flex">{[1, 2, 3, 4, 5].map((n) => (
+    <button key={n} type="button" style={{ padding: 1 }} onClick={(e) => { e.stopPropagation(); onChange && onChange(n === value ? 0 : n); }} aria-label={`${n} stars`}>
+      <Ic n="Star" size={size} fill={n <= value ? "#D4A857" : "none"} color={n <= value ? "#D4A857" : "#CFC7B8"} />
+    </button>))}
+  </div>
+);
+const Leaf = ({ style, className = "" }) => (
+  <svg viewBox="0 0 200 200" className={className} style={style} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+    <path d="M18 186 C 60 140, 110 90, 186 16" />
+    {[[46, 156, -100], [64, 136, 10], [82, 118, -100], [100, 100, 10], [118, 82, -100], [136, 64, 10], [154, 46, -100], [170, 30, 10]].map(([x, y, r], k) => (
+      <path key={k} d="M0 0 C 8 -10, 26 -10, 34 0 C 26 10, 8 10, 0 0 Z" transform={`translate(${x} ${y}) rotate(${r})`} />
+    ))}
+  </svg>
+);
+const PageHead = ({ title, sub, children }) => (
+  <div className="flex items-end justify-between gap-3 mb-5 flex-wrap">
+    <div className="min-w-0">
+      <h1 className="serif text-4xl md:text-5xl font-semibold leading-none">{title}</h1>
+      {sub && <p className="wp-mut text-sm mt-2">{sub}</p>}
+    </div>
+    {children && <div className="flex items-center gap-2 flex-wrap">{children}</div>}
+  </div>
+);
+const CardHead = ({ title, action, onAction, children }) => (
+  <div className="flex items-center justify-between gap-2 mb-3">
+    <h2 className="serif text-2xl font-semibold leading-tight">{title}</h2>
+    {children}
+    {action && <button className="text-sm flex items-center gap-0.5 wp-link" onClick={onAction}>{action}<Ic n="ChevronRight" size={15} /></button>}
+  </div>
+);
+const Legend = ({ c, l, v, strong, red, border }) => (
+  <div className="flex items-center gap-2">
+    {c && <span style={{ width: 10, height: 10, borderRadius: 3, background: c, border: border ? "1px solid #C9D6CD" : "none", flexShrink: 0 }} />}
+    <span className={`flex-1 ${strong ? "font-medium" : "wp-mut"}`}>{l}</span>
+    <span className={`num ${strong ? "font-semibold" : ""}`} style={{ color: red ? "var(--red)" : undefined }}>{v}</span>
+  </div>
+);
+const Stat = ({ icon, label, value, sub, warn, bar, onClick, tone }) => {
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag onClick={onClick} className={`wp-card ${onClick ? "hov" : ""} text-left p-4 flex flex-col gap-2 w-full min-w-0`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs uppercase tracking-wider wp-mut truncate">{label}</span>
+        <span className="wp-ico" data-tone={tone || "sage"}><Ic n={icon} size={15} /></span>
+      </div>
+      <div className="serif text-2xl md:text-3xl font-semibold leading-none num truncate" style={{ color: warn ? "var(--red)" : undefined }}>{value}</div>
+      {bar != null && <Bar v={bar} color={warn ? "var(--red)" : "var(--sage)"} />}
+      {sub && <div className="text-xs truncate" style={{ color: warn ? "var(--red)" : "var(--mut)" }}>{sub}</div>}
+    </Tag>
+  );
+};
+const MoneyInput = ({ value, onChange, placeholder = "0", allowNeg }) => {
+  const { db } = useApp();
+  return (
+    <div className="relative">
+      <span className="absolute text-sm wp-mut" style={{ left: 12, top: "50%", transform: "translateY(-50%)" }}>{(CUR[db.settings.currency] || db.settings.currency + " ").trim()}</span>
+      <input type="number" inputMode="decimal" step="any" min={allowNeg ? undefined : "0"} className="wp-input num" style={{ paddingLeft: 46 }} value={value} onChange={onChange} placeholder={placeholder} />
+    </div>
+  );
+};
+function Modal({ onClose, title, subtitle, children, footer, maxWidth }) {
+  useEffect(() => {
+    const k = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", k);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", k); document.body.style.overflow = prev; };
+  }, []);
+  return (
+    <div className="wp-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="wp-sheet" style={maxWidth ? { maxWidth } : undefined}>
+        <div className="md:hidden flex justify-center pt-2"><span style={{ width: 40, height: 4, borderRadius: 4, background: "#D8D1C5" }} /></div>
+        <div className="flex items-center justify-between gap-3 px-5 pt-3 pb-3" style={{ borderBottom: "1px solid var(--line)" }}>
+          <div className="min-w-0">
+            <h3 className="serif text-2xl font-semibold truncate">{title}</h3>
+            {subtitle && <p className="text-xs wp-mut">{subtitle}</p>}
+          </div>
+          <button className="wp-icon-btn" onClick={onClose} aria-label="Close"><Ic n="X" /></button>
+        </div>
+        <div className="wp-sheet-body flex-1">{children}</div>
+        {footer && <div className="px-5 pt-3 flex items-center gap-2 flex-wrap" style={{ borderTop: "1px solid var(--line)", paddingBottom: "calc(.8rem + env(safe-area-inset-bottom))" }}>{footer}</div>}
+      </div>
+    </div>
+  );
+}
+function Confirm({ box, onClose }) {
+  if (!box) return null;
+  return (
+    <div className="wp-overlay" style={{ zIndex: 90 }} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="wp-sheet" style={{ maxWidth: 430 }}>
+        <div className="p-6" style={{ paddingBottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}>
+          <h3 className="serif text-2xl font-semibold mb-2">{box.title || "Are you sure?"}</h3>
+          {box.msg && <p className="wp-mut text-sm leading-relaxed">{box.msg}</p>}
+          <div className="flex gap-2 justify-end mt-6 flex-wrap">
+            <Btn kind="ghost" onClick={() => { onClose(); box.onNo && box.onNo(); }}>{box.no || "Cancel"}</Btn>
+            <Btn kind={box.danger ? "danger" : "primary"} onClick={() => { onClose(); box.onYes && box.onYes(); }}>{box.yes || "Confirm"}</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ───────── dashboard ───────── */
+function Countdown({ date, time }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i); }, []);
+  const d0 = pd(date);
+  if (!d0) return null;
+  const [h, m] = (time || "00:00").split(":").map(Number);
+  d0.setHours(h || 0, m || 0, 0, 0);
+  const ms = d0.getTime() - now;
+  if (ms <= 0) return null;
+  const parts = [[Math.floor(ms / 864e5), "days"], [Math.floor(ms / 36e5) % 24, "hrs"], [Math.floor(ms / 6e4) % 60, "min"], [Math.floor(ms / 1e3) % 60, "sec"]];
+  return (
+    <div>
+      <div className="flex gap-2">
+        {parts.map(([v, l]) => (
+          <div key={l} className="text-center rounded-2xl px-2 py-2" style={{ background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.18)", minWidth: 56 }}>
+            <div className="text-2xl font-medium num">{pad(v)}</div>
+            <div className="text-xs uppercase tracking-wider" style={{ opacity: 0.7 }}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <div className="text-xs mt-2" style={{ opacity: 0.75 }}>until the ceremony{time ? ` at ${fmtTime(time)}` : ""}</div>
+    </div>
+  );
+}
+
+function TaskLine({ task: x, onToggle, onOpen }) {
+  const d = x.due ? diffDays(today(), x.due) : null;
+  const late = !x.done && d !== null && d < 0;
+  const soon = !x.done && d !== null && d >= 0 && d <= 3;
+  return (
+    <div className="wp-row flex items-start gap-3 px-2.5 py-2.5 rounded-xl">
+      <button className={`wp-check ${x.done ? "on" : ""}`} onClick={onToggle} aria-label="Toggle done" style={{ marginTop: 1 }}>
+        {x.done && <Ic n="Check" size={14} strokeWidth={3} />}
+      </button>
+      <button className="flex-1 min-w-0 text-left" onClick={onOpen}>
+        <div className={`text-sm md:text-base leading-snug ${x.done ? "line-through wp-mut" : ""}`} style={{ fontWeight: 500 }}>{x.title}</div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs wp-mut">
+          {x.due && <span className="flex items-center gap-1" style={{ color: late ? "var(--red)" : soon ? "#A07A3C" : undefined, fontWeight: late || soon ? 600 : 400 }}><Ic n="Calendar" size={12} />{x.done ? fmtD(x.due) : relDay(x.due)}</span>}
+          {x.cat && <span>{x.cat}</span>}
+          {x.who && x.who !== "Both" && <span>· {x.who}</span>}
+          {x.pri === "High" && !x.done && <span className="wp-chip" style={{ background: "var(--bl)", color: "var(--bd)", padding: "0 .45rem" }}>High</span>}
+        </div>
+        {x.notes && <div className="text-xs wp-mut mt-1 wp-clamp2">{x.notes}</div>}
+      </button>
+    </div>
+  );
+}
+
+function Dashboard() {
+  const { db, update, go, money, imgs, toast } = useApp();
+  const s = db.settings, t = today();
+  const daysTo = diffDays(t, s.date);
+  const pending = db.tasks.filter((x) => !x.done).sort(byDue);
+  const overdue = pending.filter((x) => x.due && x.due < t);
+  const done = db.tasks.length - pending.length;
+  const pct = db.tasks.length ? done / db.tasks.length : 0;
+  const b = budgetStats(db.budget), g = guestStats(db.guests);
+  const booked = db.vendors.filter((v) => v.status === "Booked");
+  const payments = db.budget.items.filter((i) => i.due && cost(i) - num(i.paid) > 0).sort(byDue).slice(0, 4);
+  const favs = db.mood.items.filter((i) => i.fav || i.final).slice(-6).reverse();
+  const verse = daysTo === 0 ? VERSE_DAY : VERSES[Math.floor(Date.now() / 864e5) % VERSES.length];
+  const bookedIn = (c) => db.vendors.find((v) => v.cat === c && v.status === "Booked");
+  const toggle = (x) => { update("tasks", (ts) => ts.map((y) => (y.id === x.id ? { ...y, done: !y.done, doneAt: y.done ? null : Date.now() } : y))); if (!x.done) toast("Nice, one less thing to do ✓"); };
+  const rows = [
+    ["Ceremony format", PLANS[s.plan] || PLANS.undecided, s.plan !== "undecided"],
+    s.plan !== "venue" && ["Church", bookedIn("Church") ? bookedIn("Church").name : "Not booked yet", !!bookedIn("Church")],
+    ["Reception venue", bookedIn("Reception venue") ? bookedIn("Reception venue").name : "Not booked yet", !!bookedIn("Reception venue")],
+    ["Marquee", bookedIn("Marquee hire") ? bookedIn("Marquee hire").name : "Not booked yet", !!bookedIn("Marquee hire")],
+  ].filter(Boolean);
+  return (
+    <div className="space-y-4 md:space-y-5">
+      <div className="wp-hero p-6 md:p-9">
+        <Leaf className="wp-float" style={{ position: "absolute", right: -30, top: -20, width: 240, height: 240, color: "rgba(235,214,168,.4)" }} />
+        <Leaf style={{ position: "absolute", left: -50, bottom: -60, width: 200, height: 200, color: "rgba(255,255,255,.13)", transform: "rotate(180deg)" }} />
+        <div className="relative">
+          <p className="text-xs uppercase tracking-widest gold">{s.plan === "church" ? "Church ceremony · Marquee reception" : s.plan === "venue" ? "Garden ceremony · Marquee reception" : "An outdoor marquee wedding"}</p>
+          <h1 className="serif font-semibold mt-2 leading-none" style={{ fontSize: "clamp(2.4rem, 7vw, 4.2rem)" }}>{coupleName(s)}</h1>
+          <p className="mt-3 text-sm md:text-base" style={{ opacity: 0.88 }}>{fmtLong(s.date)}{s.time ? ` · ${fmtTime(s.time)}` : ""}</p>
+          <div className="mt-6 flex flex-wrap items-end gap-x-8 gap-y-5">
+            {daysTo > 0 ? (
+              <div>
+                <div className="serif font-semibold leading-none gold num" style={{ fontSize: "clamp(4.5rem, 16vw, 7.5rem)" }}>{daysTo}</div>
+                <div className="text-xs uppercase tracking-widest mt-1" style={{ opacity: 0.88 }}>{daysTo === 1 ? "day to go" : "days to go"}</div>
+              </div>
+            ) : (
+              <div className="serif font-semibold gold" style={{ fontSize: "clamp(2.2rem,7vw,3.5rem)" }}>{daysTo === 0 ? "Today's the day! 💍" : `Married for ${-daysTo} days ♥`}</div>
+            )}
+            {daysTo >= 0 && <Countdown date={s.date} time={s.time} />}
+            <div className="flex items-center gap-3 md:ml-auto">
+              <Ring pct={pct} size={68}><span className="text-sm font-medium">{Math.round(pct * 100)}%</span></Ring>
+              <div className="text-xs" style={{ opacity: 0.88 }}>planning<br />complete</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <Stat icon="ListChecks" label="Tasks done" value={`${done}/${db.tasks.length}`} bar={pct} sub={overdue.length ? `${overdue.length} overdue` : `${pending.length} still to do`} warn={overdue.length > 0} onClick={() => go("tasks")} />
+        <Stat icon="Wallet" tone="gold" label="Budget left" value={money(b.remaining)} bar={b.total ? b.committed / b.total : 0} sub={b.total ? `${Math.round((b.committed / b.total) * 100)}% allocated` : "Set your budget"} warn={b.remaining < 0} onClick={() => go("budget")} />
+        <Stat icon="Users" tone="blush" label="Attending" value={g.yes} sub={`${g.invited} invited · ${g.pending} awaiting`} onClick={() => go("guests")} />
+        <Stat icon="Store" label="Vendors booked" value={booked.length} sub={`${db.vendors.length} on your list`} onClick={() => go("vendors")} />
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-4 md:gap-5">
+        <Card className="p-4 md:p-5 md:col-span-2">
+          <CardHead title="Up next" action="All tasks" onAction={() => go("tasks")} />
+          {pending.length === 0 ? <Empty icon="Sparkles" title="All caught up" text="Every task is ticked off. Enjoy it!" /> : (
+            <div>
+              {overdue.length > 0 && <div className="wp-alert mb-2"><Ic n="AlertCircle|CircleAlert" size={16} />{overdue.length} task{overdue.length > 1 ? "s are" : " is"} overdue</div>}
+              {pending.slice(0, 6).map((x) => <TaskLine key={x.id} task={x} onToggle={() => toggle(x)} onOpen={() => go("tasks")} />)}
+            </div>
+          )}
+        </Card>
+        <Card className="p-5">
+          <CardHead title="Budget" action="Manage" onAction={() => go("budget")} />
+          <div className="flex items-center gap-4">
+            <Donut size={124} thick={14} parts={[{ v: b.paid, c: "#4F6E5C" }, { v: Math.max(0, b.committed - b.paid), c: "#B8955A" }, { v: Math.max(0, b.remaining), c: "#E4ECE6" }]}>
+              <div className="text-xs wp-mut">left</div>
+              <div className="serif text-xl font-semibold" style={{ color: b.remaining < 0 ? "var(--red)" : undefined }}>{b.total ? `${Math.round((Math.max(0, b.remaining) / b.total) * 100)}%` : "—"}</div>
+            </Donut>
+            <div className="flex-1 min-w-0 space-y-2 text-sm">
+              <Legend c="#E4ECE6" border l="Total" v={money(b.total)} />
+              <Legend c="#4F6E5C" l="Paid" v={money(b.paid)} />
+              <Legend c="#B8955A" l="To pay" v={money(b.due)} />
+              <div className="pt-2" style={{ borderTop: "1px solid var(--line)" }}><Legend l="Remaining" v={money(b.remaining)} strong red={b.remaining < 0} /></div>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-5">
+          <CardHead title="The plan" action="Venues" onAction={() => go("vendors")} />
+          <div className="space-y-3">
+            {rows.map(([l, v, ok]) => (
+              <div key={l} className="flex items-start gap-3">
+                <span className="wp-dot" style={{ background: ok ? "var(--sage)" : "#E8CD99" }}>{ok && <Ic n="Check" size={11} strokeWidth={3} color="#fff" />}</span>
+                <div className="min-w-0"><div className="text-xs wp-mut">{l}</div><div className="text-sm font-medium">{v}</div></div>
+              </div>
+            ))}
+          </div>
+          {s.plan === "undecided" && <button className="text-sm mt-4 wp-link" onClick={() => go("settings")}>Set the ceremony format →</button>}
+        </Card>
+        <Card className="p-5">
+          <CardHead title="Payments due" action="Budget" onAction={() => go("budget")} />
+          {payments.length === 0 ? <p className="text-sm wp-mut">No payment dates yet. Add a due date to any budget item and it'll show up here.</p> : payments.map((i) => (
+            <div key={i.id} className="flex items-center justify-between gap-2 py-2" style={{ borderBottom: "1px solid var(--line)" }}>
+              <div className="min-w-0"><div className="text-sm font-medium truncate">{i.name}</div><div className="text-xs" style={{ color: i.due < t ? "var(--red)" : "var(--mut)" }}>{relDay(i.due)}</div></div>
+              <div className="text-sm num font-medium">{money(cost(i) - num(i.paid))}</div>
+            </div>
+          ))}
+        </Card>
+        <Card className="p-6 flex flex-col justify-center" style={{ background: "linear-gradient(160deg,#FFFFFF,#F7EFE3)" }}>
+          <Ic n="Heart" size={18} color="#C4847C" fill="#EBCBC5" />
+          <p className="serif text-xl md:text-2xl italic leading-snug mt-3">“{verse[0]}”</p>
+          <p className="text-xs uppercase tracking-widest wp-mut mt-3">{verse[1]}</p>
+        </Card>
+        <Card className="p-5 md:col-span-3">
+          <CardHead title="Loved ideas" action="Moodboard" onAction={() => go("mood")} />
+          {favs.length === 0 ? (
+            <div className="flex items-center gap-4 flex-wrap"><p className="text-sm wp-mut flex-1">Tap the heart on moodboard images and your favourites will gather here.</p><Btn kind="soft" onClick={() => go("mood")}><Ic n="Image" size={16} />Open moodboard</Btn></div>
+          ) : (
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+              {favs.map((i) => { const src = i.hasImg ? imgs[i.id] : i.url; return (
+                <button key={i.id} className="wp-sq rounded-xl overflow-hidden relative" style={{ background: "#EFEAE1" }} onClick={() => go("mood")}>
+                  {src && src !== "missing" && <img src={src} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+                </button>
+              ); })}
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ───────── tasks ───────── */
+function Tasks() {
+  const { db, update, toast } = useApp();
+  const [filter, setFilter] = useState("pending");
+  const [q, setQ] = useState("");
+  const [cat, setCat] = useState("All");
+  const [who, setWho] = useState("All");
+  const [edit, setEdit] = useState(null);
+  const [quick, setQuick] = useState("");
+  const [quickDate, setQuickDate] = useState("");
+  const t = today();
+  const list = db.tasks.filter((x) => (cat === "All" || x.cat === cat) && (who === "All" || x.who === who) && (!q || `${x.title} ${x.notes || ""}`.toLowerCase().includes(q.toLowerCase())));
+  const pend = list.filter((x) => !x.done).sort(byDue);
+  const doneL = list.filter((x) => x.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
+  const groups = filter === "done" ? [["Completed", doneL]] : filter === "overdue" ? [["Overdue", pend.filter((x) => x.due && x.due < t)]] : filter === "all" ? [...groupPending(pend, t), ["Completed", doneL]] : groupPending(pend, t);
+  const toggle = (x) => { update("tasks", (ts) => ts.map((y) => (y.id === x.id ? { ...y, done: !y.done, doneAt: y.done ? null : Date.now() } : y))); if (!x.done) toast("Done ✓"); };
+  const addQuick = (e) => {
+    e.preventDefault();
+    if (!quick.trim()) return;
+    update("tasks", (ts) => [...ts, { id: uid(), title: quick.trim(), notes: "", due: quickDate, cat: cat !== "All" ? cat : "Planning", who: "Both", pri: "Medium", done: false }]);
+    setQuick(""); setQuickDate(""); toast("Task added");
+  };
+  const doneN = db.tasks.filter((x) => x.done).length;
+  const odN = db.tasks.filter((x) => !x.done && x.due && x.due < t).length;
+  return (
+    <div>
+      <PageHead title="Tasks" sub={`${doneN} of ${db.tasks.length} done${odN ? ` · ${odN} overdue` : ""}`}>
+        <Btn onClick={() => setEdit({})}><Ic n="Plus" size={16} />New task</Btn>
+      </PageHead>
+      <Card className="p-3 mb-4">
+        <form onSubmit={addQuick} className="flex gap-2 items-center">
+          <input className="wp-input flex-1 min-w-0" placeholder="Quick add a task…" value={quick} onChange={(e) => setQuick(e.target.value)} />
+          <input type="date" className="wp-input" style={{ width: 138, flexShrink: 0 }} value={quickDate} onChange={(e) => setQuickDate(e.target.value)} aria-label="Estimated date" />
+          <button type="submit" className="wp-icon-btn" style={{ background: "var(--sd)", color: "#fff" }} aria-label="Add"><Ic n="Plus" /></button>
+        </form>
+      </Card>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="wp-scroll-x" style={{ maxWidth: "100%" }}><Seg value={filter} onChange={setFilter} options={[["pending", "To do"], ["overdue", `Overdue${odN ? ` · ${odN}` : ""}`], ["done", "Done"], ["all", "All"]]} /></div>
+        <div className="relative flex-1" style={{ minWidth: 170 }}>
+          <span className="absolute" style={{ left: 12, top: 12, color: "var(--mut)" }}><Ic n="Search" size={16} /></span>
+          <input className="wp-input" style={{ paddingLeft: 36 }} placeholder="Search tasks & notes" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <select className="wp-input" style={{ width: "auto" }} value={cat} onChange={(e) => setCat(e.target.value)}><option value="All">All categories</option>{TASK_CATS.map((c) => <option key={c}>{c}</option>)}</select>
+        <select className="wp-input" style={{ width: "auto" }} value={who} onChange={(e) => setWho(e.target.value)}><option value="All">Everyone</option>{WHO.map((c) => <option key={c}>{c}</option>)}</select>
+      </div>
+      {groups.every(([, a]) => !a.length) ? (
+        <Card><Empty icon="ListChecks" title="Nothing here" text={q ? "No tasks match your search." : filter === "overdue" ? "No overdue tasks. Nice work!" : filter === "done" ? "Tick off a task and it'll land here." : "Add a task above to get started."} /></Card>
+      ) : groups.filter(([, a]) => a.length).map(([label, arr]) => (
+        <div key={label} className="mb-5">
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <h3 className="text-xs uppercase tracking-widest font-semibold" style={{ color: label === "Overdue" ? "var(--red)" : "var(--mut)" }}>{label}</h3>
+            <span className="text-xs wp-mut">{arr.length}</span>
+          </div>
+          <Card className="p-1.5 md:p-2">{arr.map((x) => <TaskLine key={x.id} task={x} onToggle={() => toggle(x)} onOpen={() => setEdit(x)} />)}</Card>
+        </div>
+      ))}
+      {edit && <TaskModal task={edit} onClose={() => setEdit(null)} />}
+    </div>
+  );
+}
+
+function TaskModal({ task, onClose }) {
+  const { update, ask, toast } = useApp();
+  const isNew = !task.id;
+  const [f, setF] = useState({ title: "", notes: "", due: "", cat: "Planning", who: "Both", pri: "Medium", done: false, ...task });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const save = () => {
+    if (!f.title.trim()) return toast("Give the task a name");
+    const rec = { ...f, title: f.title.trim() };
+    update("tasks", (ts) => (isNew ? [...ts, { ...rec, id: uid() }] : ts.map((x) => (x.id === task.id ? rec : x))));
+    toast(isNew ? "Task added" : "Task saved");
+    onClose();
+  };
+  const del = () => ask({ title: "Delete this task?", msg: f.title, yes: "Delete", danger: true, onYes: () => { update("tasks", (ts) => ts.filter((x) => x.id !== task.id)); toast("Task deleted"); onClose(); } });
+  return (
+    <Modal onClose={onClose} title={isNew ? "New task" : "Edit task"} footer={<>
+      {!isNew && <Btn kind="danger" onClick={del}><Ic n="Trash2" size={15} />Delete</Btn>}
+      <div className="flex-1" />
+      <Btn kind="ghost" onClick={onClose}>Cancel</Btn>
+      <Btn onClick={save}>{isNew ? "Add task" : "Save"}</Btn>
+    </>}>
+      <div className="space-y-4">
+        <Field label="Task"><input className="wp-input" value={f.title} onChange={set("title")} placeholder="e.g. Book the photographer" /></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Estimated date"><input type="date" className="wp-input" value={f.due || ""} onChange={set("due")} /></Field>
+          <Field label="Category"><select className="wp-input" value={f.cat} onChange={set("cat")}>{TASK_CATS.map((c) => <option key={c}>{c}</option>)}</select></Field>
+          <Field label="Who's on it"><select className="wp-input" value={f.who} onChange={set("who")}>{WHO.map((c) => <option key={c}>{c}</option>)}</select></Field>
+          <Field label="Priority"><select className="wp-input" value={f.pri} onChange={set("pri")}>{PRI.map((c) => <option key={c}>{c}</option>)}</select></Field>
+        </div>
+        <Field label="Notes"><textarea className="wp-input" rows={5} value={f.notes} onChange={set("notes")} placeholder="Contacts, prices, questions to ask, ideas…" /></Field>
+        {!isNew && (
+          <button type="button" className="flex items-center gap-2 text-sm" onClick={() => setF({ ...f, done: !f.done, doneAt: f.done ? null : Date.now() })}>
+            <span className={`wp-check ${f.done ? "on" : ""}`}>{f.done && <Ic n="Check" size={14} strokeWidth={3} />}</span>{f.done ? "Completed" : "Mark as done"}
+          </button>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/* ───────── budget ───────── */
+const payState = (i) => {
+  const c = cost(i), p = num(i.paid);
+  if (c <= 0) return ["Needs price", "#F1EEE8", "var(--mut)"];
+  if (p >= c) return ["Paid", "var(--sl)", "var(--sd)"];
+  if (p > 0) return ["Deposit paid", "var(--gl)", "var(--gd)"];
+  return ["Unpaid", "#F1EEE8", "#6B7570"];
+};
+
+function Budget() {
+  const { db, update, money, toast } = useApp();
+  const b = budgetStats(db.budget);
+  const [edit, setEdit] = useState(null);
+  const [fund, setFund] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const cats = Object.entries(b.byCat).filter(([, v]) => v > 0).sort((a, z) => z[1] - a[1]);
+  const items = db.budget.items.filter((i) => filter === "all" || (filter === "unpaid" ? cost(i) === 0 || cost(i) - num(i.paid) > 0 : cost(i) > 0 && num(i.paid) >= cost(i)));
+  const ord = (c) => { const k = BUDGET_CATS.indexOf(c); return k < 0 ? 99 : k; };
+  const groups = [...new Set(items.map((i) => i.cat || "Other"))].sort((a, z) => ord(a) - ord(z)).map((c) => [c, items.filter((i) => (i.cat || "Other") === c)]);
+  const pctUsed = b.total ? b.committed / b.total : 0;
+  const addCommon = () => {
+    const have = new Set(db.budget.items.map((i) => i.name.toLowerCase()));
+    const add = COMMON_COSTS.filter(([n]) => !have.has(n.toLowerCase())).map(([name, cat]) => ({ id: uid(), name, cat, vendor: "", est: 0, actual: 0, paid: 0, due: "", notes: "" }));
+    update("budget", (bb) => ({ ...bb, items: [...bb.items, ...add] }));
+    toast(add.length ? `Added ${add.length} common costs. Fill in prices as quotes arrive` : "They're all already here");
+  };
+  const addFund = (name, amount) => {
+    update("budget", (bb) => ({ ...bb, funds: [...bb.funds, { id: uid(), name, amount }] }));
+    toast(amount >= 0 ? `Added ${money(amount)} to the budget` : `Took ${money(-amount)} off the budget`);
+  };
+  return (
+    <div>
+      <PageHead title="Budget" sub="Every cost you add comes straight off what's left.">
+        <Btn onClick={() => setEdit({})}><Ic n="Plus" size={16} />Add expense</Btn>
+      </PageHead>
+      <Card className="p-5 md:p-7 mb-4">
+        <div className="grid md:grid-cols-2 gap-6 items-center">
+          <div className="min-w-0">
+            <div className="text-xs uppercase tracking-widest wp-mut">Remaining</div>
+            <div className="serif font-semibold num leading-none mt-1 truncate" style={{ fontSize: "clamp(2.5rem,8vw,3.8rem)", color: b.remaining < 0 ? "var(--red)" : "var(--ink)" }}>{money(b.remaining)}</div>
+            <div className="text-sm wp-mut mt-1">{b.total ? `of ${money(b.total)} total budget` : "Add a budget source to set your total"}</div>
+            {b.remaining < 0 && <div className="wp-alert mt-3"><Ic n="AlertCircle|CircleAlert" size={16} />You're {money(-b.remaining)} over budget</div>}
+            <div className="mt-4"><Bar h={10} v={b.total ? b.paid / b.total : 0} color="var(--sd)" v2={pctUsed} color2="var(--gold)" /></div>
+            <div className="grid grid-cols-3 gap-3 mt-4">
+              {[["Allocated", b.committed, "var(--gold)"], ["Paid", b.paid, "var(--sd)"], ["Still to pay", b.due, null]].map(([l, v, c]) => (
+                <div key={l} className="min-w-0">
+                  <div className="text-xs wp-mut flex items-center gap-1">{c && <span style={{ width: 8, height: 8, borderRadius: 2, background: c }} />}{l}</div>
+                  <div className="font-medium num text-sm md:text-base truncate">{money(v)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-5 min-w-0">
+            <Donut size={136} thick={16} parts={cats.map(([c, v]) => ({ v, c: catColor(c) }))}>
+              <div className="text-xs wp-mut">allocated</div>
+              <div className="serif text-2xl font-semibold">{Math.round(pctUsed * 100)}%</div>
+            </Donut>
+            <div className="flex-1 min-w-0 space-y-2">
+              {cats.length === 0 && <p className="text-sm wp-mut">Spending by category will show here.</p>}
+              {cats.slice(0, 6).map(([c, v]) => (
+                <div key={c} className="flex items-center gap-2 text-sm">
+                  <span style={{ width: 9, height: 9, borderRadius: 3, background: catColor(c), flexShrink: 0 }} />
+                  <span className="flex-1 truncate wp-mut">{c}</span>
+                  <span className="num">{money(v)}</span>
+                </div>
+              ))}
+              {cats.length > 6 && <div className="text-xs wp-mut">+ {cats.length - 6} more categories</div>}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid lg:grid-cols-5 gap-4">
+        <div className="lg:col-span-2 order-1 lg:order-2 space-y-4">
+          <Calc remaining={b.remaining} onFund={addFund} onExpense={(label, amt) => setEdit({ name: label, est: amt })} />
+          <Card className="p-5">
+            <CardHead title="Budget sources"><Btn kind="soft" className="wp-btn-sm" onClick={() => setFund({})}><Ic n="Plus" size={14} />Add</Btn></CardHead>
+            {db.budget.funds.length === 0 ? <p className="text-sm wp-mut">Add your savings, family contributions or gifts. Together they make your total budget.</p> : db.budget.funds.map((f) => (
+              <button key={f.id} className="wp-row w-full flex items-center justify-between gap-2 px-2 py-2 rounded-lg text-left" onClick={() => setFund(f)}>
+                <span className="text-sm truncate">{f.name}</span>
+                <span className="text-sm num font-medium" style={{ color: num(f.amount) < 0 ? "var(--red)" : "var(--sd)" }}>{num(f.amount) >= 0 ? "+" : ""}{money(num(f.amount))}</span>
+              </button>
+            ))}
+            <div className="flex justify-between mt-2 pt-3 px-2 font-semibold" style={{ borderTop: "1px solid var(--line)" }}><span>Total budget</span><span className="num">{money(b.total)}</span></div>
+          </Card>
+        </div>
+        <div className="lg:col-span-3 order-2 lg:order-1">
+          <Card className="p-3 md:p-4">
+            <div className="flex items-center justify-between gap-2 px-2 pt-1 pb-3 flex-wrap">
+              <h2 className="serif text-2xl font-semibold">Expenses</h2>
+              <Seg value={filter} onChange={setFilter} options={[["all", "All"], ["unpaid", "To pay"], ["paid", "Paid"]]} />
+            </div>
+            {db.budget.items.length === 0 ? (
+              <Empty icon="Wallet" title="No expenses yet" text="Start with a list of typical wedding costs and fill in the prices as quotes come in.">
+                <Btn onClick={addCommon}><Ic n="Sparkles" size={16} />Add common costs</Btn>
+                <Btn kind="ghost" onClick={() => setEdit({})}>Add my own</Btn>
+              </Empty>
+            ) : groups.length === 0 ? <p className="text-sm wp-mut px-2 pb-4">Nothing in this view.</p> : groups.map(([c, arr]) => (
+              <div key={c} className="mb-2">
+                <div className="flex items-center justify-between px-3 py-2 text-xs uppercase tracking-wider wp-mut">
+                  <span className="flex items-center gap-2"><span style={{ width: 8, height: 8, borderRadius: 2, background: catColor(c) }} />{c}</span>
+                  <span className="num">{money(arr.reduce((a, i) => a + cost(i), 0))}</span>
+                </div>
+                {arr.map((i) => { const [st, bg, fg] = payState(i); const c2 = cost(i); return (
+                  <button key={i.id} className="wp-row w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl" onClick={() => setEdit(i)}>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{i.name}</div>
+                      <div className="text-xs wp-mut truncate">{[i.vendor, num(i.actual) > 0 ? "Confirmed price" : c2 ? "Estimate" : null, i.due && c2 - num(i.paid) > 0 ? `Due ${fmtD(i.due)}` : null].filter(Boolean).join(" · ") || "Tap to add a price"}</div>
+                      {c2 > 0 && <div className="mt-2" style={{ maxWidth: 220 }}><Bar h={4} v={num(i.paid) / c2} /></div>}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="font-medium num">{c2 ? money(c2) : "—"}</div>
+                      <span className="wp-chip mt-1" style={{ background: bg, color: fg }}>{st}</span>
+                    </div>
+                  </button>
+                ); })}
+              </div>
+            ))}
+            {db.budget.items.length > 0 && <div className="px-2 pt-2 pb-1"><button className="text-sm wp-link" onClick={addCommon}>+ Add common wedding costs</button></div>}
+          </Card>
+        </div>
+      </div>
+      {edit && <ExpenseModal item={edit} onClose={() => setEdit(null)} />}
+      {fund && <FundModal fund={fund} onClose={() => setFund(null)} />}
+    </div>
+  );
+}
+
+function Calc({ remaining, onFund, onExpense }) {
+  const { money, toast } = useApp();
+  const [e, setE] = useState("");
+  const [label, setLabel] = useState("");
+  const val = evalExpr(e);
+  const press = (k) => {
+    if (k === "C") return setE("");
+    if (k === "⌫") return setE((x) => x.slice(0, -1));
+    if (k === "=") { if (val !== null) setE(val < 0 ? "−" + fmtPlain(-val) : fmtPlain(val)); return; }
+    setE((x) => {
+      const last = x.slice(-1);
+      if (OPS.includes(k)) {
+        if (!x) return k === "−" ? "−" : x;
+        if (OPS.includes(last)) return x.length === 1 ? x : x.slice(0, -1) + k;
+        return x + k;
+      }
+      const seg = x.split(/[+−×÷]/).pop();
+      if (k === ".") return seg.includes(".") ? x : x + (seg ? "." : "0.");
+      if (seg.replace(".", "").length >= 12) return x;
+      return x + k;
+    });
+  };
+  const onKey = (ev) => {
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) return;
+    const map = { "+": "+", "-": "−", "*": "×", x: "×", "/": "÷", Enter: "=", "=": "=", Backspace: "⌫", Escape: "C", Delete: "C", ".": ".", ",": "." };
+    const k = /^[0-9]$/.test(ev.key) ? ev.key : map[ev.key];
+    if (k) { ev.preventDefault(); press(k); }
+  };
+  const act = (type) => {
+    if (!(val > 0)) return toast("Enter an amount on the calculator first");
+    const amt = Math.round(val * 100) / 100;
+    if (type === "exp") onExpense(label.trim(), amt);
+    else onFund(label.trim() || (type === "add" ? "Added funds" : "Budget reduction"), type === "add" ? amt : -amt);
+    setE(""); setLabel("");
+  };
+  const keys = ["C", "⌫", "÷", "×", "7", "8", "9", "−", "4", "5", "6", "+", "1", "2", "3", "=", "0", "."];
+  return (
+    <Card className="p-4 md:p-5">
+      <div tabIndex={0} onKeyDown={onKey} style={{ outline: "none" }}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="serif text-2xl font-semibold flex items-center gap-2"><Ic n="Calculator" size={20} />Calculator</h3>
+          <button className="text-xs wp-link" onClick={() => setE(remaining < 0 ? "−" + fmtPlain(-remaining) : fmtPlain(remaining))}>Use remaining</button>
+        </div>
+        <div className="wp-screen">
+          <div className="text-right text-sm num" style={{ opacity: 0.65, minHeight: 20, wordBreak: "break-all" }}>{e || " "}</div>
+          <div className="text-right serif font-semibold num truncate" style={{ fontSize: "2.4rem", lineHeight: 1.1 }}>{val !== null ? fmtNum(val) : "0"}</div>
+        </div>
+        {val > 0 && (
+          <div className="grid grid-cols-2 gap-2 text-xs mt-2">
+            <div className="rounded-xl px-3 py-2" style={{ background: "var(--rl)" }}>If spent: <b className="num">{money(remaining - val)}</b> left</div>
+            <div className="rounded-xl px-3 py-2" style={{ background: "var(--sl)" }}>If added: <b className="num">{money(remaining + val)}</b> left</div>
+          </div>
+        )}
+        <div className="grid grid-cols-4 gap-2 mt-3">
+          {keys.map((k) => (
+            <button key={k} className={`wp-key ${OPS.includes(k) ? "op" : ""} ${k === "=" ? "eq" : ""} ${k === "C" || k === "⌫" ? "fn" : ""}`} style={k === "=" ? { gridRow: "span 2", height: "auto" } : k === "0" ? { gridColumn: "span 2" } : undefined} onClick={() => press(k)} aria-label={k === "⌫" ? "Backspace" : k}>
+              {k === "⌫" ? <Ic n="Delete" size={19} /> : k}
+            </button>
+          ))}
+        </div>
+        <input className="wp-input mt-3" placeholder="What's it for? (optional)" value={label} onChange={(ev) => setLabel(ev.target.value)} />
+        <div className="grid grid-cols-3 gap-2 mt-2">
+          <Btn kind="soft" className="wp-btn-sm" onClick={() => act("add")}><Ic n="Plus" size={14} />Budget</Btn>
+          <Btn kind="ghost" className="wp-btn-sm" onClick={() => act("sub")}><Ic n="Minus" size={14} />Budget</Btn>
+          <Btn className="wp-btn-sm" onClick={() => act("exp")}><Ic n="Plus" size={14} />Expense</Btn>
+        </div>
+        <p className="text-xs wp-mut mt-2 leading-snug">+ Budget adds money to your total · − Budget takes money off · + Expense logs a cost that comes out of what's left.</p>
+      </div>
+    </Card>
+  );
+}
+
+function ExpenseModal({ item, onClose }) {
+  const { update, ask, toast, money } = useApp();
+  const isNew = !item.id;
+  const s2 = (v) => (num(v) ? String(v) : "");
+  const [f, setF] = useState({ name: item.name || "", cat: item.cat || BUDGET_CATS[0], vendor: item.vendor || "", est: s2(item.est), actual: s2(item.actual), paid: s2(item.paid), due: item.due || "", notes: item.notes || "" });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const c = num(f.actual) > 0 ? num(f.actual) : num(f.est);
+  const save = () => {
+    if (!f.name.trim()) return toast("Give the expense a name");
+    const rec = { ...f, name: f.name.trim(), est: num(f.est), actual: num(f.actual), paid: num(f.paid) };
+    update("budget", (b) => ({ ...b, items: isNew ? [...b.items, { ...rec, id: uid() }] : b.items.map((i) => (i.id === item.id ? { ...i, ...rec } : i)) }));
+    toast(isNew ? (c ? `Added. ${money(c)} comes off your budget` : "Expense added") : "Expense saved");
+    onClose();
+  };
+  const del = () => ask({ title: "Delete this expense?", msg: `${f.name} will be removed${c ? ` and ${money(c)} goes back into your budget` : ""}.`, yes: "Delete", danger: true, onYes: () => { update("budget", (b) => ({ ...b, items: b.items.filter((i) => i.id !== item.id) })); toast("Expense removed"); onClose(); } });
+  return (
+    <Modal onClose={onClose} title={isNew ? "New expense" : "Edit expense"} footer={<>
+      {!isNew && <Btn kind="danger" onClick={del}><Ic n="Trash2" size={15} />Delete</Btn>}
+      <div className="flex-1" />
+      <Btn kind="ghost" onClick={onClose}>Cancel</Btn>
+      <Btn onClick={save}>{isNew ? "Add expense" : "Save"}</Btn>
+    </>}>
+      <div className="space-y-4">
+        <Field label="What is it?"><input className="wp-input" value={f.name} onChange={set("name")} placeholder="e.g. Marquee hire" /></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Category"><select className="wp-input" value={f.cat} onChange={set("cat")}>{BUDGET_CATS.map((x) => <option key={x}>{x}</option>)}</select></Field>
+          <Field label="Vendor"><input className="wp-input" value={f.vendor} onChange={set("vendor")} placeholder="Optional" /></Field>
+          <Field label="Estimated cost"><MoneyInput value={f.est} onChange={set("est")} /></Field>
+          <Field label="Final price"><MoneyInput value={f.actual} onChange={set("actual")} placeholder="Once confirmed" /></Field>
+          <Field label="Paid so far"><MoneyInput value={f.paid} onChange={set("paid")} /></Field>
+          <Field label="Balance due by"><input type="date" className="wp-input" value={f.due} onChange={set("due")} /></Field>
+        </div>
+        <div className="wp-note flex items-center justify-between gap-2 flex-wrap">
+          <span>Counts against budget: <b className="num">{money(c)}</b> · Balance: <b className="num">{money(Math.max(0, c - num(f.paid)))}</b></span>
+          {c > 0 && num(f.paid) < c && <button type="button" className="wp-link text-sm" onClick={() => setF({ ...f, paid: String(c) })}>Mark paid in full</button>}
+        </div>
+        <Field label="Notes"><textarea className="wp-input" rows={3} value={f.notes} onChange={set("notes")} placeholder="What's included, deposit terms, receipt details…" /></Field>
+      </div>
+    </Modal>
+  );
+}
+
+function FundModal({ fund, onClose }) {
+  const { update, ask, toast } = useApp();
+  const isNew = !fund.id;
+  const [name, setName] = useState(fund.name || "");
+  const [amount, setAmount] = useState(fund.amount ? String(fund.amount) : "");
+  const save = () => {
+    if (!name.trim() || !num(amount)) return toast("Add a name and an amount");
+    const rec = { name: name.trim(), amount: num(amount) };
+    update("budget", (b) => ({ ...b, funds: isNew ? [...b.funds, { ...rec, id: uid() }] : b.funds.map((x) => (x.id === fund.id ? { ...x, ...rec } : x)) }));
+    toast("Budget updated"); onClose();
+  };
+  const del = () => ask({ title: "Remove this source?", msg: name, yes: "Remove", danger: true, onYes: () => { update("budget", (b) => ({ ...b, funds: b.funds.filter((x) => x.id !== fund.id) })); toast("Removed"); onClose(); } });
+  return (
+    <Modal onClose={onClose} title={isNew ? "Add budget source" : "Edit budget source"} maxWidth={460} footer={<>
+      {!isNew && <Btn kind="danger" onClick={del}><Ic n="Trash2" size={15} />Remove</Btn>}
+      <div className="flex-1" />
+      <Btn kind="ghost" onClick={onClose}>Cancel</Btn>
+      <Btn onClick={save}>Save</Btn>
+    </>}>
+      <div className="space-y-4">
+        <Field label="Source"><input className="wp-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Our savings, Bride's parents, Gift" /></Field>
+        <Field label="Amount" hint="Use a negative number to reduce the budget."><MoneyInput value={amount} onChange={(e) => setAmount(e.target.value)} allowNeg /></Field>
+      </div>
+    </Modal>
+  );
+}
+
+/* ───────── moodboard ───────── */
+function useAddFiles() {
+  const { update, saveImg } = useApp();
+  return async (files, board, caption, onProgress) => {
+    const list = Array.from(files || []).filter((f) => /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic|heif|avif)$/i.test(f.name));
+    let ok = 0;
+    for (let n = 0; n < list.length; n++) {
+      onProgress && onProgress(n + 1, list.length);
+      try {
+        const data = await compressImage(list[n]);
+        const id = uid();
+        if (await saveImg(id, data)) {
+          const item = { id, board, hasImg: true, caption: list.length === 1 ? (caption || "").trim() : "", fav: false, final: false, added: Date.now() };
+          update("mood", (m) => ({ ...m, items: [...m.items, item] }));
+          ok++;
+        }
+      } catch (e) { /* unreadable file, skip */ }
+    }
+    return { ok, total: list.length };
+  };
+}
+
+function Palette() {
+  const { db, update } = useApp();
+  const p = db.mood.palette || [];
+  const setP = (np) => update("mood", (m) => ({ ...m, palette: np }));
+  return (
+    <Card className="p-4 md:p-5 mb-4">
+      <div className="flex items-center gap-2 mb-3"><Ic n="Palette" size={18} /><h3 className="serif text-xl font-semibold">Colour palette</h3><span className="text-xs wp-mut ml-1">tap a colour to change it</span></div>
+      <div className="flex flex-wrap gap-4 items-start">
+        {p.map((c, k) => (
+          <div key={k} className="flex flex-col items-center gap-1" style={{ position: "relative" }}>
+            <label className="wp-swatch" style={{ background: c }}>
+              <input type="color" value={c} onChange={(e) => setP(p.map((x, j) => (j === k ? e.target.value : x)))} style={{ opacity: 0, position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "pointer" }} />
+            </label>
+            <button className="wp-swatch-x" onClick={() => setP(p.filter((_, j) => j !== k))} aria-label="Remove colour">×</button>
+            <span className="wp-mut num" style={{ fontSize: 10 }}>{c.toUpperCase()}</span>
+          </div>
+        ))}
+        {p.length < 10 && <button className="wp-swatch flex items-center justify-center" style={{ background: "#fff", border: "2px dashed #D6CEC0", boxShadow: "none" }} onClick={() => setP([...p, "#D9C7A7"])} aria-label="Add colour"><Ic n="Plus" size={16} /></button>}
+      </div>
+    </Card>
+  );
+}
+
+function BoardTile({ bd, items, onOpen }) {
+  const { imgs } = useApp();
+  const cover = items.find((i) => i.final) || items.find((i) => i.fav) || items[items.length - 1];
+  const src = cover && (cover.hasImg ? imgs[cover.id] : cover.url);
+  return (
+    <button className="wp-card hov text-left overflow-hidden w-full" onClick={onOpen}>
+      <div className="wp-43 relative" style={{ background: "linear-gradient(135deg,#F5EDDF,#EBCBC5 130%)" }}>
+        {src && src !== "missing" ? <img src={src} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : <div className="absolute inset-0 flex items-center justify-center" style={{ fontSize: 42 }}>{bd.emoji}</div>}
+        {items.some((i) => i.final) && <span className="wp-chip absolute" style={{ top: 8, left: 8, background: "rgba(255,255,255,.93)", color: "var(--sd)" }}>✓ Decided</span>}
+      </div>
+      <div className="p-3">
+        <div className="font-medium truncate">{bd.emoji} {bd.name}</div>
+        <div className="text-xs wp-mut">{items.length ? `${items.length} idea${items.length > 1 ? "s" : ""}` : "Empty · add ideas"}</div>
+      </div>
+    </button>
+  );
+}
+
+function ImgCard({ i, src, onOpen, onFav }) {
+  const [bad, setBad] = useState(false);
+  return (
+    <div className="wp-img-card">
+      {src && src !== "missing" && !bad ? <img src={src} alt={i.caption || ""} onClick={onOpen} onError={() => setBad(true)} style={{ cursor: "zoom-in" }} />
+        : src === undefined ? <div className="wp-shimmer wp-43" />
+        : <div className="wp-43 flex flex-col items-center justify-center gap-1 text-xs wp-mut p-3 text-center" onClick={onOpen}><Ic n="Image" size={22} />Image unavailable{i.url ? ". That site may block embedding, so try uploading it instead." : ""}</div>}
+      <div className="wp-img-actions">
+        <button className="wp-glass" onClick={onFav} aria-label="Love"><Ic n="Heart" size={15} fill={i.fav ? "#C4847C" : "none"} color={i.fav ? "#C4847C" : "currentColor"} /></button>
+        <button className="wp-glass" onClick={onOpen} aria-label="Open"><Ic n="Maximize2" size={14} /></button>
+      </div>
+      {i.final && <span className="wp-chip absolute" style={{ top: 8, left: 8, background: "rgba(255,255,255,.93)", color: "var(--sd)" }}><Ic n="Check" size={12} strokeWidth={3} />Final pick</span>}
+      {i.caption && <div className="px-3 py-2 text-xs" style={{ background: "#fff" }}>{i.caption}</div>}
+    </div>
+  );
+}
+
+function Mood() {
+  const { db, update, imgs, toast } = useApp();
+  const addFiles = useAddFiles();
+  const [board, setBoard] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [lb, setLb] = useState(null);
+  const [bEdit, setBEdit] = useState(null);
+  const [drag, setDrag] = useState(false);
+  const [busy, setBusy] = useState("");
+  const m = db.mood;
+  const cur = board ? m.boards.find((x) => x.id === board) : null;
+  useEffect(() => { if (board && !cur) setBoard(null); }, [board, cur]);
+  const itemsOf = (id) => m.items.filter((i) => i.board === id);
+  const srcOf = (i) => (i.hasImg ? imgs[i.id] : i.url);
+  const toggleFav = (id) => update("mood", (mm) => ({ ...mm, items: mm.items.map((x) => (x.id === id ? { ...x, fav: !x.fav } : x)) }));
+  const onDrop = async (e) => {
+    e.preventDefault(); setDrag(false);
+    if (!cur || !e.dataTransfer.files.length) return;
+    const r = await addFiles(e.dataTransfer.files, cur.id, "", (n, t) => setBusy(`adding ${n} of ${t}…`));
+    setBusy(""); toast(r.ok ? `Added ${r.ok} image${r.ok > 1 ? "s" : ""}` : "Couldn't read those files");
+  };
+  const modals = (<>
+    {adding !== false && <AddImages boardId={adding} onClose={() => setAdding(false)} />}
+    {lb && <Lightbox id={lb} setId={setLb} onClose={() => setLb(null)} />}
+    {bEdit && <BoardModal board={bEdit} onClose={() => setBEdit(null)} onDeleted={() => setBoard(null)} onCreated={(id) => setBoard(id)} />}
+  </>);
+  if (cur) {
+    const items = [...itemsOf(cur.id)].reverse();
+    return (
+      <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={(e) => { if (e.currentTarget === e.target) setDrag(false); }} onDrop={onDrop} className={drag ? "wp-dragging" : ""}>
+        <div className="flex items-center gap-2 mb-4">
+          <button className="wp-icon-btn" onClick={() => setBoard(null)} aria-label="Back to boards"><Ic n="ChevronLeft" size={22} /></button>
+          <div className="flex-1 min-w-0">
+            <h1 className="serif text-3xl md:text-5xl font-semibold leading-none truncate">{cur.emoji} {cur.name}</h1>
+            <p className="text-sm wp-mut mt-1">{items.length} idea{items.length === 1 ? "" : "s"}{busy ? ` · ${busy}` : ""}</p>
+          </div>
+          <button className="wp-icon-btn" onClick={() => setBEdit(cur)} aria-label="Edit board"><Ic n="Pencil" size={16} /></button>
+          <Btn onClick={() => setAdding(cur.id)}><Ic n="Plus" size={16} /><span className="hidden sm:inline">Add images</span></Btn>
+        </div>
+        <div className="wp-scroll-x flex gap-2 mb-4 pb-1">
+          {m.boards.map((bd) => { const n = itemsOf(bd.id).length; return <button key={bd.id} className={`wp-pill ${bd.id === cur.id ? "on" : ""}`} onClick={() => setBoard(bd.id)}>{bd.emoji} {bd.name}{n ? <span style={{ opacity: 0.6 }}>{n}</span> : null}</button>; })}
+        </div>
+        {items.length === 0 ? (
+          <button className="wp-drop w-full py-16 flex flex-col items-center justify-center gap-2" onClick={() => setAdding(cur.id)}>
+            <span style={{ fontSize: 42 }}>{cur.emoji}</span>
+            <span className="serif text-2xl font-semibold" style={{ color: "var(--ink)" }}>Start your {cur.name.toLowerCase()} board</span>
+            <span className="text-sm">Upload photos or screenshots, or drag them here</span>
+          </button>
+        ) : (
+          <div className="wp-masonry">
+            <button className="wp-drop w-full py-10 flex flex-col items-center justify-center gap-1" onClick={() => setAdding(cur.id)}><Ic n="Plus" size={22} /><span className="text-sm font-medium">Add inspiration</span></button>
+            {items.map((i) => <ImgCard key={i.id} i={i} src={srcOf(i)} onOpen={() => setLb(i.id)} onFav={() => toggleFav(i.id)} />)}
+          </div>
+        )}
+        {modals}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <PageHead title="Moodboard" sub={`${m.items.length} idea${m.items.length === 1 ? "" : "s"} across ${m.boards.length} boards`}>
+        <Btn onClick={() => setAdding(m.boards[0] ? m.boards[0].id : "")}><Ic n="Upload" size={16} />Add images</Btn>
+      </PageHead>
+      <Palette />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+        {m.boards.map((bd) => <BoardTile key={bd.id} bd={bd} items={itemsOf(bd.id)} onOpen={() => setBoard(bd.id)} />)}
+        <button className="wp-drop flex flex-col items-center justify-center gap-2 p-6" style={{ minHeight: 170 }} onClick={() => setBEdit({})}><Ic n="Plus" size={22} /><span className="text-sm font-medium">New board</span></button>
+      </div>
+      {modals}
+    </div>
+  );
+}
+
+function AddImages({ boardId, onClose }) {
+  const { db, update, toast } = useApp();
+  const addFiles = useAddFiles();
+  const boards = db.mood.boards;
+  const [bid, setBid] = useState(boardId || (boards[0] ? boards[0].id : ""));
+  const [tab, setTab] = useState("upload");
+  const [url, setUrl] = useState("");
+  const [caption, setCaption] = useState("");
+  const [busy, setBusy] = useState("");
+  const [drag, setDrag] = useState(false);
+  const run = async (files) => {
+    if (!bid) return toast("Create a board first");
+    if (busy) return;
+    const r = await addFiles(files, bid, caption, (n, t) => setBusy(`Adding ${n} of ${t}…`));
+    setBusy("");
+    if (!r.total) return toast("Choose image files");
+    toast(r.ok ? `Added ${r.ok} image${r.ok > 1 ? "s" : ""}` : "Couldn't read those images");
+    if (r.ok) onClose();
+  };
+  const addUrl = () => {
+    const u = url.trim();
+    if (!/^https?:\/\/\S+$/i.test(u)) return toast("Paste a full image link starting with https://");
+    if (!bid) return toast("Create a board first");
+    update("mood", (m) => ({ ...m, items: [...m.items, { id: uid(), board: bid, url: u, caption: caption.trim(), fav: false, final: false, added: Date.now() }] }));
+    toast("Image added"); onClose();
+  };
+  return (
+    <Modal onClose={onClose} title="Add inspiration" subtitle="Photos, screenshots or saved pins">
+      <div className="space-y-4">
+        <Field label="Board"><select className="wp-input" value={bid} onChange={(e) => setBid(e.target.value)}>{boards.map((b) => <option key={b.id} value={b.id}>{b.emoji} {b.name}</option>)}</select></Field>
+        <Field label="Caption (optional)"><input className="wp-input" value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="e.g. Love the lace sleeves" /></Field>
+        <Seg value={tab} onChange={setTab} options={[["upload", "Upload photos"], ["link", "Image link"]]} />
+        {tab === "upload" ? (
+          <label className={`wp-drop p-8 text-center block ${drag ? "on" : ""}`} style={{ cursor: "pointer" }} onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); run(e.dataTransfer.files); }}>
+            <input type="file" accept="image/*" multiple className="wp-sr" disabled={!!busy} onChange={(e) => { run(e.target.files); e.target.value = ""; }} />
+            {busy ? (<><Ic n="RefreshCw" size={26} className="wp-spin" style={{ margin: "0 auto" }} /><div className="mt-2 font-medium">{busy}</div></>) : (<>
+              <div className="mx-auto flex items-center justify-center" style={{ width: 54, height: 54, borderRadius: 999, background: "var(--gl)", color: "var(--gd)" }}><Ic n="Upload" size={22} /></div>
+              <div className="mt-3 font-medium" style={{ color: "var(--ink)" }}>Tap to choose photos</div>
+              <div className="text-xs mt-1">Pick several at once, or drag & drop on a computer</div>
+            </>)}
+          </label>
+        ) : (
+          <div className="space-y-3">
+            <Field label="Image address" hint="Long-press or right-click an image online → Copy image address. Some sites block this; if it doesn't show, save the image and upload it."><input className="wp-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" /></Field>
+            {/^https?:\/\/\S+$/i.test(url.trim()) && <img src={url.trim()} alt="" className="rounded-xl" style={{ maxHeight: 180, objectFit: "contain", margin: "0 auto" }} />}
+            <Btn className="w-full" onClick={addUrl}>Add image</Btn>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function Lightbox({ id, setId, onClose }) {
+  const { db, update, imgs, delImg, ask, toast } = useApp();
+  const m = db.mood;
+  const i = m.items.find((x) => x.id === id);
+  const sibs = i ? [...m.items.filter((x) => x.board === i.board)].reverse() : [];
+  const idx = sibs.findIndex((x) => x.id === id);
+  const step = (d) => { if (sibs.length > 1) setId(sibs[(idx + d + sibs.length) % sibs.length].id); };
+  useEffect(() => {
+    const k = (e) => { if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; if (e.key === "Escape") onClose(); if (e.key === "ArrowRight") step(1); if (e.key === "ArrowLeft") step(-1); };
+    window.addEventListener("keydown", k);
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", k); document.body.style.overflow = ""; };
+  });
+  useEffect(() => { if (!i) onClose(); }, [i]);
+  if (!i) return null;
+  const patch = (p) => update("mood", (mm) => ({ ...mm, items: mm.items.map((x) => (x.id === id ? { ...x, ...p } : x)) }));
+  const src = i.hasImg ? imgs[i.id] : i.url;
+  const del = () => ask({ title: "Remove this image?", yes: "Remove", danger: true, onYes: () => {
+    const next = sibs.length > 1 ? sibs[(idx + 1) % sibs.length].id : null;
+    update("mood", (mm) => ({ ...mm, items: mm.items.filter((x) => x.id !== id) }));
+    if (i.hasImg) delImg(i.id);
+    toast("Image removed");
+    next ? setId(next) : onClose();
+  } });
+  return (
+    <div className="wp-lightbox">
+      <div className="flex-1 relative flex items-center justify-center p-4" style={{ minHeight: 0 }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+        {src && src !== "missing" ? <img src={src} alt={i.caption || ""} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 12 }} /> : <div className="text-sm" style={{ color: "rgba(255,255,255,.7)" }}>Image unavailable</div>}
+        <button className="wp-lb-btn" style={{ top: 14, right: 14 }} onClick={onClose} aria-label="Close"><Ic n="X" /></button>
+        {sibs.length > 1 && <>
+          <button className="wp-lb-btn" style={{ left: 14, top: "50%", transform: "translateY(-50%)" }} onClick={() => step(-1)} aria-label="Previous"><Ic n="ChevronLeft" /></button>
+          <button className="wp-lb-btn" style={{ right: 14, top: "50%", transform: "translateY(-50%)" }} onClick={() => step(1)} aria-label="Next"><Ic n="ChevronRight" /></button>
+        </>}
+      </div>
+      <div className="wp-lb-panel">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs wp-mut flex-1">{idx + 1} of {sibs.length}</span>
+          <button className={`wp-btn wp-btn-sm ${i.fav ? "wp-btn-blush" : "wp-btn-ghost"}`} onClick={() => patch({ fav: !i.fav })}><Ic n="Heart" size={14} fill={i.fav ? "currentColor" : "none"} />{i.fav ? "Loved" : "Love"}</button>
+          <button className={`wp-btn wp-btn-sm ${i.final ? "wp-btn-primary" : "wp-btn-ghost"}`} onClick={() => patch({ final: !i.final })}><Ic n="Check" size={14} />{i.final ? "Final pick" : "Make final"}</button>
+        </div>
+        <div className="space-y-3">
+          <Field label="Caption"><input className="wp-input" value={i.caption || ""} onChange={(e) => patch({ caption: e.target.value })} placeholder="Add a caption" /></Field>
+          <Field label="Notes"><textarea className="wp-input" rows={3} value={i.notes || ""} onChange={(e) => patch({ notes: e.target.value })} placeholder="Where it's from, price, what you love about it…" /></Field>
+          <Field label="Board"><select className="wp-input" value={i.board} onChange={(e) => patch({ board: e.target.value })}>{m.boards.map((b) => <option key={b.id} value={b.id}>{b.emoji} {b.name}</option>)}</select></Field>
+          <Btn kind="danger" className="w-full" onClick={del}><Ic n="Trash2" size={15} />Remove image</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BoardModal({ board, onClose, onDeleted, onCreated }) {
+  const { db, update, delImg, ask, toast } = useApp();
+  const isNew = !board.id;
+  const [name, setName] = useState(board.name || "");
+  const [emoji, setEmoji] = useState(board.emoji || "✨");
+  const count = isNew ? 0 : db.mood.items.filter((i) => i.board === board.id).length;
+  const save = () => {
+    if (!name.trim()) return toast("Give the board a name");
+    if (isNew) { const id = uid(); update("mood", (m) => ({ ...m, boards: [...m.boards, { id, name: name.trim(), emoji }] })); onCreated && onCreated(id); toast("Board created"); }
+    else update("mood", (m) => ({ ...m, boards: m.boards.map((b) => (b.id === board.id ? { ...b, name: name.trim(), emoji } : b)) }));
+    onClose();
+  };
+  const del = () => ask({ title: `Delete “${board.name}”?`, msg: count ? `This also removes its ${count} image${count > 1 ? "s" : ""}.` : "This board is empty.", yes: "Delete board", danger: true, onYes: () => {
+    const gone = db.mood.items.filter((i) => i.board === board.id);
+    update("mood", (m) => ({ ...m, boards: m.boards.filter((b) => b.id !== board.id), items: m.items.filter((i) => i.board !== board.id) }));
+    gone.forEach((i) => i.hasImg && delImg(i.id));
+    onDeleted && onDeleted(); onClose(); toast("Board deleted");
+  } });
+  return (
+    <Modal onClose={onClose} title={isNew ? "New board" : "Edit board"} maxWidth={480} footer={<>
+      {!isNew && <Btn kind="danger" onClick={del}><Ic n="Trash2" size={15} />Delete</Btn>}
+      <div className="flex-1" />
+      <Btn kind="ghost" onClick={onClose}>Cancel</Btn>
+      <Btn onClick={save}>{isNew ? "Create" : "Save"}</Btn>
+    </>}>
+      <div className="space-y-4">
+        <Field label="Board name"><input className="wp-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Welcome signage" /></Field>
+        <div><span className="wp-label">Icon</span><div className="flex flex-wrap gap-2">{EMOJIS.map((e) => <button key={e} type="button" className={`wp-emo ${emoji === e ? "on" : ""}`} onClick={() => setEmoji(e)}>{e}</button>)}</div></div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ───────── guests ───────── */
+function Guests() {
+  const { db, update } = useApp();
+  const [q, setQ] = useState("");
+  const [f, setF] = useState("all");
+  const [side, setSide] = useState("All");
+  const [edit, setEdit] = useState(null);
+  const [bulk, setBulk] = useState(false);
+  const g = guestStats(db.guests);
+  const rs = (x) => x.rsvp || "Pending";
+  const list = db.guests.filter((x) => (f === "all" || rs(x) === f) && (side === "All" || x.side === side) && (!q || `${x.name} ${x.group || ""}`.toLowerCase().includes(q.toLowerCase()))).sort((a, b) => a.name.localeCompare(b.name));
+  const setR = (id, r) => update("guests", (gs) => gs.map((x) => (x.id === id ? { ...x, rsvp: r } : x)));
+  const cer = db.settings.plan === "venue" ? "Ceremony" : "Church";
+  return (
+    <div>
+      <PageHead title="Guests" sub={`${g.parties} invitation${g.parties === 1 ? "" : "s"} · ${g.invited} people`}>
+        <Btn kind="ghost" onClick={() => setBulk(true)}>Paste a list</Btn>
+        <Btn onClick={() => setEdit({})}><Ic n="Plus" size={16} />Add guest</Btn>
+      </PageHead>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <Stat icon="Users" label="Invited" value={g.invited} sub={`${g.bride} bride's · ${g.groom} groom's`} />
+        <Stat icon="Check" label="Attending" value={g.yes} sub={`Reception ${g.reception} · ${cer} ${g.ceremony}`} />
+        <Stat icon="Clock" tone="gold" label="Awaiting reply" value={g.pending} />
+        <Stat icon="X" tone="blush" label="Declined" value={g.no} />
+      </div>
+      <div className="flex flex-wrap gap-2 mb-3 items-center">
+        <div className="wp-scroll-x" style={{ maxWidth: "100%" }}><Seg value={f} onChange={setF} options={[["all", "All"], ["Yes", "Attending"], ["Pending", "Waiting"], ["No", "Declined"]]} /></div>
+        <select className="wp-input" style={{ width: "auto" }} value={side} onChange={(e) => setSide(e.target.value)}><option value="All">Both sides</option><option value="Bride">Bride's side</option><option value="Groom">Groom's side</option><option value="Both">Mutual</option></select>
+        <div className="relative flex-1" style={{ minWidth: 160 }}>
+          <span className="absolute" style={{ left: 12, top: 12, color: "var(--mut)" }}><Ic n="Search" size={16} /></span>
+          <input className="wp-input" style={{ paddingLeft: 36 }} placeholder="Search guests" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+      </div>
+      <Card className="p-1.5 md:p-2">
+        {db.guests.length === 0 ? (
+          <Empty icon="Users" title="No guests yet" text="Add guests one at a time, or paste a whole list at once.">
+            <Btn onClick={() => setEdit({})}><Ic n="Plus" size={16} />Add guest</Btn>
+            <Btn kind="ghost" onClick={() => setBulk(true)}>Paste a list</Btn>
+          </Empty>
+        ) : list.length === 0 ? <p className="p-4 text-sm wp-mut">No guests match.</p> : list.map((x) => (
+          <div key={x.id} className="wp-row flex items-center gap-3 px-2.5 py-2.5 rounded-xl">
+            <div className="wp-avatar" style={{ background: x.side === "Bride" ? "var(--bl)" : x.side === "Groom" ? "var(--sl)" : "var(--gl)", color: x.side === "Bride" ? "var(--bd)" : x.side === "Groom" ? "var(--sd)" : "var(--gd)" }}>{initials(x.name)}</div>
+            <button className="flex-1 min-w-0 text-left" onClick={() => setEdit(x)}>
+              <div className="font-medium truncate">{x.name}{heads(x) > 1 && <span className="wp-chip ml-2">party of {heads(x)}</span>}</div>
+              <div className="text-xs wp-mut truncate">{[x.side === "Both" ? "Mutual" : x.side ? `${x.side}'s side` : null, x.group, x.invite && x.invite !== "Both" ? `${x.invite} only` : null, x.table ? `Table ${x.table}` : null, x.diet].filter(Boolean).join(" · ")}</div>
+            </button>
+            <div className="wp-seg" style={{ padding: 2 }}>
+              {[["Yes", "Check", "var(--sd)"], ["Pending", "Clock", "#A07A3C"], ["No", "X", "var(--red)"]].map(([r, icon, col]) => (
+                <button key={r} className={rs(x) === r ? "on" : ""} style={{ padding: ".38rem .5rem", color: rs(x) === r ? col : undefined }} onClick={() => setR(x.id, r)} aria-label={r} title={r === "Yes" ? "Attending" : r === "No" ? "Declined" : "Waiting"}><Ic n={icon} size={15} /></button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </Card>
+      {edit && <GuestModal guest={edit} onClose={() => setEdit(null)} />}
+      {bulk && <BulkGuests onClose={() => setBulk(false)} />}
+    </div>
+  );
+}
+
+const GROUPS = ["Family", "Friends", "Work", "Church", "Neighbours"];
+const INVITES = [["Both", "Church & reception"], ["Ceremony", "Ceremony only"], ["Reception", "Reception only"]];
+function GuestModal({ guest, onClose }) {
+  const { update, ask, toast } = useApp();
+  const isNew = !guest.id;
+  const [f, setF] = useState({ name: "", count: 1, side: "Bride", group: "", invite: "Both", rsvp: "Pending", table: "", phone: "", diet: "", ...guest });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const save = () => {
+    if (!f.name.trim()) return toast("Add a name");
+    const rec = { ...f, name: f.name.trim(), count: Math.max(1, parseInt(f.count, 10) || 1) };
+    update("guests", (gs) => (isNew ? [...gs, { ...rec, id: uid() }] : gs.map((x) => (x.id === guest.id ? rec : x))));
+    toast(isNew ? "Guest added" : "Guest saved"); onClose();
+  };
+  const del = () => ask({ title: "Remove this guest?", msg: f.name, yes: "Remove", danger: true, onYes: () => { update("guests", (gs) => gs.filter((x) => x.id !== guest.id)); toast("Guest removed"); onClose(); } });
+  return (
+    <Modal onClose={onClose} title={isNew ? "Add guest" : "Edit guest"} footer={<>
+      {!isNew && <Btn kind="danger" onClick={del}><Ic n="Trash2" size={15} />Remove</Btn>}
+      <div className="flex-1" />
+      <Btn kind="ghost" onClick={onClose}>Cancel</Btn>
+      <Btn onClick={save}>{isNew ? "Add guest" : "Save"}</Btn>
+    </>}>
+      <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Name" className="col-span-2"><input className="wp-input" value={f.name} onChange={set("name")} placeholder="e.g. The Fernando family" /></Field>
+          <Field label="People"><input type="number" min="1" inputMode="numeric" className="wp-input" value={f.count} onChange={set("count")} /></Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Side"><select className="wp-input" value={f.side} onChange={set("side")}><option value="Bride">Bride's side</option><option value="Groom">Groom's side</option><option value="Both">Mutual</option></select></Field>
+          <Field label="Group"><input className="wp-input" list="wp-groups" value={f.group} onChange={set("group")} placeholder="Family, Friends…" /><datalist id="wp-groups">{GROUPS.map((x) => <option key={x} value={x} />)}</datalist></Field>
+          <Field label="Invited to"><select className="wp-input" value={f.invite} onChange={set("invite")}>{INVITES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+          <Field label="RSVP"><select className="wp-input" value={f.rsvp} onChange={set("rsvp")}><option value="Pending">Waiting for reply</option><option value="Yes">Attending</option><option value="No">Declined</option></select></Field>
+          <Field label="Table"><input className="wp-input" value={f.table} onChange={set("table")} placeholder="Optional" /></Field>
+          <Field label="Phone"><input type="tel" className="wp-input" value={f.phone} onChange={set("phone")} placeholder="Optional" /></Field>
+        </div>
+        <Field label="Dietary needs / notes"><input className="wp-input" value={f.diet} onChange={set("diet")} placeholder="e.g. Vegetarian, needs a high chair" /></Field>
+      </div>
+    </Modal>
+  );
+}
+
+function BulkGuests({ onClose }) {
+  const { update, toast } = useApp();
+  const [text, setText] = useState("");
+  const [side, setSide] = useState("Bride");
+  const [group, setGroup] = useState("");
+  const [invite, setInvite] = useState("Both");
+  const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const save = () => {
+    if (!lines.length) return toast("Paste at least one name");
+    const add = lines.map((l) => {
+      const m = l.match(/^(.*?)[,\s]+(?:x|×)?\s*(\d{1,2})$/i);
+      const ok = m && m[1].trim() && parseInt(m[2], 10) <= 20;
+      return { id: uid(), name: ok ? m[1].trim() : l, count: ok ? Math.max(1, parseInt(m[2], 10)) : 1, side, group, invite, rsvp: "Pending", table: "", phone: "", diet: "" };
+    });
+    update("guests", (gs) => [...gs, ...add]);
+    toast(`Added ${add.length} guest${add.length > 1 ? "s" : ""}`); onClose();
+  };
+  return (
+    <Modal onClose={onClose} title="Paste a guest list" subtitle="One name per line · add a number for a party, e.g. “Perera family, 4”" footer={<><div className="flex-1" /><Btn kind="ghost" onClick={onClose}>Cancel</Btn><Btn onClick={save}>Add {lines.length || ""} guest{lines.length === 1 ? "" : "s"}</Btn></>}>
+      <div className="space-y-4">
+        <textarea className="wp-input" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Aunty Malini, 2\nRuwan & Dilani, 2\nPastor John"} />
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Side"><select className="wp-input" value={side} onChange={(e) => setSide(e.target.value)}><option value="Bride">Bride's</option><option value="Groom">Groom's</option><option value="Both">Mutual</option></select></Field>
+          <Field label="Group"><input className="wp-input" list="wp-groups2" value={group} onChange={(e) => setGroup(e.target.value)} placeholder="Optional" /><datalist id="wp-groups2">{GROUPS.map((x) => <option key={x} value={x} />)}</datalist></Field>
+          <Field label="Invited to"><select className="wp-input" value={invite} onChange={(e) => setInvite(e.target.value)}>{INVITES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ───────── vendors ───────── */
+function Vendors() {
+  const { db, update, toast, money } = useApp();
+  const [cat, setCat] = useState("All");
+  const [edit, setEdit] = useState(null);
+  const used = VENDOR_CATS.filter((c) => db.vendors.some((v) => v.cat === c));
+  const list = db.vendors.filter((v) => cat === "All" || (cat === "Venues" ? VENUE_CATS.includes(v.cat) : v.cat === cat)).sort((a, b) => V_STATUS.indexOf(a.status) - V_STATUS.indexOf(b.status) || (b.rating || 0) - (a.rating || 0));
+  const patch = (id, p) => update("vendors", (vs) => vs.map((x) => (x.id === id ? { ...x, ...p } : x)));
+  const inBudget = (v) => v.budgetId && db.budget.items.some((i) => i.id === v.budgetId);
+  const toBudget = (v) => {
+    if (inBudget(v)) return toast("Already in your budget");
+    const id = uid();
+    update("budget", (b) => ({ ...b, items: [...b.items, { id, name: v.name, cat: V_TO_B[v.cat] || "Other", vendor: v.name, est: num(v.quote), actual: v.status === "Booked" ? num(v.quote) : 0, paid: 0, due: "", notes: "Added from Vendors" }] }));
+    patch(v.id, { budgetId: id });
+    toast(`${money(num(v.quote))} added to your budget`);
+  };
+  const venueBooked = db.vendors.some((v) => VENUE_CATS.includes(v.cat) && v.status === "Booked");
+  return (
+    <div>
+      <PageHead title="Vendors & Venues" sub="Compare options, keep contacts handy, and push quotes into your budget.">
+        <Btn onClick={() => setEdit({ cat: cat !== "All" && cat !== "Venues" ? cat : "Reception venue" })}><Ic n="Plus" size={16} />Add</Btn>
+      </PageHead>
+      {!venueBooked && (cat === "All" || cat === "Venues") && (
+        <div className="wp-note mb-4 flex items-start gap-2"><Ic n="MapPin" size={16} style={{ marginTop: 2, flexShrink: 0 }} /><span>Still choosing venues? Add every church, reception venue and marquee option you're considering, with quotes, capacity and notes. Filter by <b>Venues</b> to compare them side by side, then mark the winner as <b>Booked</b> and it shows on your dashboard.</span></div>
+      )}
+      <div className="wp-scroll-x flex gap-2 mb-4 pb-1">
+        {["All", "Venues", ...used.filter((c) => !VENUE_CATS.includes(c))].map((c) => <button key={c} className={`wp-pill ${cat === c ? "on" : ""}`} onClick={() => setCat(c)}>{c}</button>)}
+      </div>
+      {cat === "Venues" && list.length >= 2 && (
+        <Card className="p-4 mb-4">
+          <h3 className="serif text-xl font-semibold mb-2">Side by side</h3>
+          <div className="wp-scroll-x"><table className="wp-table">
+            <thead><tr><th>Venue</th><th>Type</th><th>Quote</th><th>Guests</th><th>Rating</th><th>Status</th></tr></thead>
+            <tbody>{list.map((v) => <tr key={v.id}><td className="font-medium">{v.name}</td><td>{v.cat}</td><td className="num">{num(v.quote) ? money(num(v.quote)) : "—"}</td><td>{v.capacity || "—"}</td><td style={{ color: "#D4A857" }}>{"★".repeat(v.rating || 0) || "—"}</td><td>{v.status}</td></tr>)}</tbody>
+          </table></div>
+        </Card>
+      )}
+      {list.length === 0 ? (
+        <Card><Empty icon="Store" title={db.vendors.length ? "Nothing in this category" : "No vendors yet"} text="Add venues, caterers, photographers and more. Quotes can go straight into your budget."><Btn onClick={() => setEdit({ cat: "Reception venue" })}><Ic n="Plus" size={16} />Add a vendor</Btn></Empty></Card>
+      ) : (
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
+          {list.map((v) => { const [bg, fg] = V_TONE[v.status] || V_TONE.Researching; return (
+            <Card key={v.id} className="p-4 flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs uppercase tracking-wider wp-mut">{v.cat}</div>
+                  <div className="serif text-xl font-semibold leading-tight">{v.name}</div>
+                  {v.contact && <div className="text-xs wp-mut">{v.contact}</div>}
+                </div>
+                <span className="wp-chip" style={{ background: bg, color: fg }}>{v.status}</span>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap text-sm">
+                <Stars value={v.rating || 0} onChange={(r) => patch(v.id, { rating: r })} />
+                {num(v.quote) > 0 && <span className="num font-medium">{money(num(v.quote))}</span>}
+                {v.capacity && <span className="wp-mut text-xs flex items-center gap-1"><Ic n="Users" size={13} />{v.capacity}</span>}
+              </div>
+              {v.notes && <p className="text-sm wp-mut wp-clamp3" style={{ whiteSpace: "pre-line" }}>{v.notes}</p>}
+              <div className="flex items-center gap-1 mt-auto flex-wrap">
+                {v.phone && <a className="wp-icon-btn" href={`tel:${v.phone.replace(/\s/g, "")}`} aria-label="Call"><Ic n="Phone" size={16} /></a>}
+                {v.email && <a className="wp-icon-btn" href={`mailto:${v.email}`} aria-label="Email"><Ic n="Mail" size={16} /></a>}
+                {v.link && <a className="wp-icon-btn" href={normUrl(v.link)} target="_blank" rel="noreferrer" aria-label="Website"><Ic n="Link" size={16} /></a>}
+                <div className="flex-1" />
+                {v.status !== "Booked" && v.status !== "Declined" && <Btn kind="ghost" className="wp-btn-sm" onClick={() => { patch(v.id, { status: "Booked" }); toast(`${v.name} booked 🎉`); }}>Mark booked</Btn>}
+                {num(v.quote) > 0 && <Btn kind="soft" className="wp-btn-sm" onClick={() => toBudget(v)}>{inBudget(v) ? "In budget ✓" : "→ Budget"}</Btn>}
+                <button className="wp-icon-btn" onClick={() => setEdit(v)} aria-label="Edit"><Ic n="Pencil" size={15} /></button>
+              </div>
+            </Card>
+          ); })}
+        </div>
+      )}
+      {edit && <VendorModal vendor={edit} onClose={() => setEdit(null)} />}
+    </div>
+  );
+}
+
+function VendorModal({ vendor, onClose }) {
+  const { update, ask, toast } = useApp();
+  const isNew = !vendor.id;
+  const [f, setF] = useState({ name: "", cat: "Reception venue", status: "Researching", rating: 0, capacity: "", contact: "", phone: "", email: "", link: "", notes: "", ...vendor, quote: num(vendor.quote) ? String(vendor.quote) : "" });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const save = () => {
+    if (!f.name.trim()) return toast("Add a name");
+    const rec = { ...f, name: f.name.trim(), quote: num(f.quote) };
+    update("vendors", (vs) => (isNew ? [...vs, { ...rec, id: uid() }] : vs.map((x) => (x.id === vendor.id ? rec : x))));
+    toast(isNew ? "Added" : "Saved"); onClose();
+  };
+  const del = () => ask({ title: "Delete this vendor?", msg: f.name, yes: "Delete", danger: true, onYes: () => { update("vendors", (vs) => vs.filter((x) => x.id !== vendor.id)); toast("Deleted"); onClose(); } });
+  return (
+    <Modal onClose={onClose} title={isNew ? "Add vendor or venue" : "Edit vendor"} footer={<>
+      {!isNew && <Btn kind="danger" onClick={del}><Ic n="Trash2" size={15} />Delete</Btn>}
+      <div className="flex-1" />
+      <Btn kind="ghost" onClick={onClose}>Cancel</Btn>
+      <Btn onClick={save}>Save</Btn>
+    </>}>
+      <div className="space-y-4">
+        <Field label="Name"><input className="wp-input" value={f.name} onChange={set("name")} placeholder="e.g. Rose Garden Estate" /></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Category"><select className="wp-input" value={f.cat} onChange={set("cat")}>{VENDOR_CATS.map((c) => <option key={c}>{c}</option>)}</select></Field>
+          <Field label="Status"><select className="wp-input" value={f.status} onChange={set("status")}>{V_STATUS.map((c) => <option key={c}>{c}</option>)}</select></Field>
+          <Field label="Quote"><MoneyInput value={f.quote} onChange={set("quote")} /></Field>
+          <Field label="Capacity (guests)"><input type="number" inputMode="numeric" className="wp-input" value={f.capacity} onChange={set("capacity")} placeholder="Optional" /></Field>
+        </div>
+        <div><span className="wp-label">Your rating</span><Stars value={f.rating || 0} size={24} onChange={(r) => setF({ ...f, rating: r })} /></div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Contact person"><input className="wp-input" value={f.contact} onChange={set("contact")} /></Field>
+          <Field label="Phone"><input type="tel" className="wp-input" value={f.phone} onChange={set("phone")} /></Field>
+          <Field label="Email"><input type="email" className="wp-input" value={f.email} onChange={set("email")} /></Field>
+          <Field label="Website / Instagram"><input className="wp-input" value={f.link} onChange={set("link")} /></Field>
+        </div>
+        <Field label="Notes"><textarea className="wp-input" rows={4} value={f.notes} onChange={set("notes")} placeholder="Pros & cons, what's included, rain plan, marquee rules, deposit terms…" /></Field>
+      </div>
+    </Modal>
+  );
+}
+
+/* ───────── wedding day ───────── */
+const TIPS = ["Check the sunset time for your date and plan couple portraits for the hour before it.", "Ask the marquee company to leave sidewalls on site in case of rain or wind.", "Light the paths, parking and toilets. Outdoor venues get dark fast.", "Citronella and insect repellent from dusk. A basket of flat slippers for dancing on grass is a nice touch.", "Plan a covered route from the cars to the marquee.", "Weigh down centrepieces, signage and linens against the breeze.", "Keep a backup generator, and someone who knows how to run it."];
+function DayPlan() {
+  const { db, update, ask, toast } = useApp();
+  const s = db.settings, tl = db.timeline;
+  const [edit, setEdit] = useState(null);
+  const [kitText, setKitText] = useState("");
+  const items = [...(tl.items || [])].sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
+  const kit = tl.kit || [];
+  const loadTpl = (plan) => ask({ title: "Load this template?", msg: `This replaces your current timeline (${items.length} items) with the ${plan === "venue" ? "ceremony-at-the-venue" : "church + reception"} schedule.`, yes: "Replace timeline", onYes: () => { update("timeline", (t) => ({ ...t, items: mkTL(plan) })); toast("Template loaded. Adjust the times to suit"); } });
+  const kitAdd = (e) => { e.preventDefault(); if (!kitText.trim()) return; update("timeline", (t) => ({ ...t, kit: [...(t.kit || []), { id: uid(), text: kitText.trim(), done: false }] })); setKitText(""); };
+  return (
+    <div>
+      <PageHead title="Wedding Day" sub={`${fmtLong(s.date)} · a run sheet for you, your families and your coordinator`}>
+        <Btn onClick={() => setEdit({})}><Ic n="Plus" size={16} />Add moment</Btn>
+      </PageHead>
+      <div className="grid lg:grid-cols-3 gap-4">
+        <Card className="p-4 md:p-6 lg:col-span-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+            <h2 className="serif text-2xl font-semibold">Timeline</h2>
+            <div className="flex gap-2 flex-wrap">
+              <Btn kind="ghost" className="wp-btn-sm" onClick={() => loadTpl("church")}>Church template</Btn>
+              <Btn kind="ghost" className="wp-btn-sm" onClick={() => loadTpl("venue")}>Venue template</Btn>
+            </div>
+          </div>
+          {items.length === 0 ? <Empty icon="Clock" title="No timeline yet" text="Load a template or add your first moment." /> : (
+            <div className="relative pl-6">
+              <span className="absolute" style={{ left: 9, top: 14, bottom: 14, width: 2, background: "linear-gradient(var(--sage),var(--gold))", opacity: 0.4, borderRadius: 2 }} />
+              {items.map((it) => (
+                <button key={it.id} className="wp-row relative w-full text-left flex gap-3 py-3 px-2 rounded-xl" onClick={() => setEdit(it)}>
+                  <span className="absolute" style={{ left: -21, top: 18, width: 12, height: 12, borderRadius: 999, background: "var(--iv)", border: "2px solid var(--sage)" }} />
+                  <span className="num text-sm font-semibold flex-shrink-0" style={{ width: 72, color: "var(--sd)", paddingTop: 1 }}>{fmtTime(it.time) || "—"}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block font-medium">{it.title}</span>
+                    {(it.place || it.who) && <span className="block text-xs wp-mut mt-0.5">{[it.place, it.who].filter(Boolean).join(" · ")}</span>}
+                    {it.notes && <span className="block text-xs wp-mut mt-1">{it.notes}</span>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
+        <div className="space-y-4">
+          <Card className="p-5">
+            <CardHead title="Emergency kit"><span className="text-xs wp-mut">{kit.filter((k) => k.done).length}/{kit.length} packed</span></CardHead>
+            {kit.map((k) => (
+              <div key={k.id} className="wp-row flex items-center gap-3 px-1 py-1.5 rounded-lg">
+                <button className={`wp-check ${k.done ? "on" : ""}`} style={{ width: 22, height: 22 }} onClick={() => update("timeline", (t) => ({ ...t, kit: t.kit.map((x) => (x.id === k.id ? { ...x, done: !x.done } : x)) }))}>{k.done && <Ic n="Check" size={12} strokeWidth={3} />}</button>
+                <span className={`flex-1 text-sm ${k.done ? "line-through wp-mut" : ""}`}>{k.text}</span>
+                <button className="wp-mut text-lg leading-none px-1" onClick={() => update("timeline", (t) => ({ ...t, kit: t.kit.filter((x) => x.id !== k.id) }))} aria-label="Remove">×</button>
+              </div>
+            ))}
+            <form onSubmit={kitAdd} className="flex gap-2 mt-3"><input className="wp-input" value={kitText} onChange={(e) => setKitText(e.target.value)} placeholder="Add an item…" /><button type="submit" className="wp-icon-btn" style={{ background: "var(--sl)", color: "var(--sd)" }} aria-label="Add"><Ic n="Plus" /></button></form>
+          </Card>
+          <Card className="p-5" style={{ background: "linear-gradient(160deg,#FFFFFF,#EEF3EF)" }}>
+            <h3 className="serif text-2xl font-semibold mb-3">Outdoor marquee tips</h3>
+            <ul className="space-y-2">{TIPS.map((t) => <li key={t} className="text-sm flex gap-2"><span style={{ color: "var(--sage)" }}>✦</span><span>{t}</span></li>)}</ul>
+          </Card>
+        </div>
+      </div>
+      {edit && <TimelineModal item={edit} onClose={() => setEdit(null)} />}
+    </div>
+  );
+}
+
+function TimelineModal({ item, onClose }) {
+  const { update, ask, toast } = useApp();
+  const isNew = !item.id;
+  const [f, setF] = useState({ time: "", title: "", place: "", who: "", notes: "", ...item });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const save = () => {
+    if (!f.title.trim()) return toast("What's happening?");
+    update("timeline", (t) => ({ ...t, items: isNew ? [...t.items, { ...f, id: uid(), title: f.title.trim() }] : t.items.map((x) => (x.id === item.id ? { ...f, title: f.title.trim() } : x)) }));
+    onClose();
+  };
+  const del = () => ask({ title: "Remove this moment?", msg: f.title, yes: "Remove", danger: true, onYes: () => { update("timeline", (t) => ({ ...t, items: t.items.filter((x) => x.id !== item.id) })); onClose(); } });
+  return (
+    <Modal onClose={onClose} title={isNew ? "Add a moment" : "Edit moment"} footer={<>
+      {!isNew && <Btn kind="danger" onClick={del}><Ic n="Trash2" size={15} />Remove</Btn>}
+      <div className="flex-1" />
+      <Btn kind="ghost" onClick={onClose}>Cancel</Btn>
+      <Btn onClick={save}>Save</Btn>
+    </>}>
+      <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Time"><input type="time" className="wp-input" value={f.time} onChange={set("time")} /></Field>
+          <Field label="What's happening" className="col-span-2"><input className="wp-input" value={f.title} onChange={set("title")} placeholder="e.g. First dance" /></Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Where"><input className="wp-input" value={f.place} onChange={set("place")} placeholder="Church, marquee…" /></Field>
+          <Field label="Who's responsible"><input className="wp-input" value={f.who} onChange={set("who")} placeholder="MC, photographer…" /></Field>
+        </div>
+        <Field label="Notes"><textarea className="wp-input" rows={3} value={f.notes} onChange={set("notes")} /></Field>
+      </div>
+    </Modal>
+  );
+}
+
+/* ───────── settings & setup ───────── */
+function SettingsView() {
+  const { db, update, ask, toast, pull, replaceAll, resetAll, sync } = useApp();
+  const st = store();
+  const local = isLocal();
+  const [f, setF] = useState(db.settings);
+  const [showExp, setShowExp] = useState(false);
+  const [imp, setImp] = useState("");
+  const taRef = useRef(null);
+  useEffect(() => setF(db.settings), [db.settings]);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const save = () => {
+    const old = db.settings.date;
+    update("settings", { ...db.settings, ...f, bride: (f.bride || "").trim(), groom: (f.groom || "").trim() });
+    toast("Settings saved");
+    const open = db.tasks.filter((t) => !t.done && t.due).length;
+    if (f.date && old && f.date !== old && open) ask({ title: "Re-plan your task dates?", msg: `The wedding moved from ${fmtFull(old)} to ${fmtFull(f.date)}. Spread your ${open} open tasks across the new timeline? Tasks in the final week keep the same number of days before the wedding.`, yes: "Re-plan dates", no: "Keep as is", onYes: () => { update("tasks", (ts) => respace(ts, old, f.date)); toast("Task dates re-planned"); } });
+  };
+  const exportText = showExp ? JSON.stringify({ app: "our-wedding-planner", version: 1, exportedAt: new Date().toISOString(), data: db }, null, 2) : "";
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(exportText); toast("Copied to clipboard"); }
+    catch (e) { if (taRef.current) { taRef.current.select(); try { document.execCommand("copy"); toast("Copied"); } catch (e2) { toast("Select the text and copy it"); } } }
+  };
+  const doImport = () => {
+    let obj;
+    try { obj = JSON.parse(imp); } catch (e) { return toast("That doesn't look like a valid backup"); }
+    const d = obj && obj.data ? obj.data : obj;
+    if (!d || typeof d !== "object" || !Object.keys(KEYS).some((k) => d[k] !== undefined)) return toast("No planner data found in that text");
+    ask({ title: "Replace everything with this backup?", msg: "Your current tasks, budget, guests, vendors, timeline and moodboard layout will be replaced.", yes: "Import", danger: true, onYes: () => { const next = {}; Object.keys(KEYS).forEach((k) => { next[k] = d[k] !== undefined ? normalize(k, d[k]) : db[k]; }); replaceAll(next); setImp(""); toast("Backup imported"); } });
+  };
+  const addStarter = () => { const have = new Set(db.tasks.map((t) => t.title)); const add = seedTasks(db.settings.date).filter((t) => !have.has(t.title)); update("tasks", (ts) => [...ts, ...add]); toast(add.length ? `Added ${add.length} starter tasks` : "You already have all the starter tasks"); };
+  const days = diffDays(today(), f.date);
+  return (
+    <div className="max-w-3xl">
+      <PageHead title="Settings" />
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="serif text-2xl font-semibold mb-4">Your wedding</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Bride's name"><input className="wp-input" value={f.bride} onChange={set("bride")} /></Field>
+          <Field label="Groom's name"><input className="wp-input" value={f.groom} onChange={set("groom")} /></Field>
+          <Field label="Wedding date"><input type="date" className="wp-input" value={f.date} onChange={set("date")} /></Field>
+          <Field label="Ceremony time"><input type="time" className="wp-input" value={f.time} onChange={set("time")} /></Field>
+          <Field label="Ceremony plan" className="col-span-2"><select className="wp-input" value={f.plan} onChange={set("plan")}>{Object.entries(PLANS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+          <Field label="Currency"><select className="wp-input" value={f.currency} onChange={set("currency")}>{Object.keys(CUR).map((c) => <option key={c}>{c}</option>)}</select></Field>
+        </div>
+        {days > 0 && <p className="text-xs wp-mut mt-3">{days} days from today{pd(f.date) ? ` · a ${pd(f.date).toLocaleDateString("en-GB", { weekday: "long" })}` : ""}</p>}
+        <div className="flex justify-end mt-4"><Btn onClick={save} disabled={JSON.stringify(f) === JSON.stringify(db.settings)} style={JSON.stringify(f) === JSON.stringify(db.settings) ? { opacity: 0.5 } : undefined}>Save changes</Btn></div>
+      </Card>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="serif text-2xl font-semibold mb-2">{local ? "Saving" : "Sharing & sync"}</h2>
+        {local ? (
+          <p className="text-sm wp-mut leading-relaxed">Your plans are saved in this browser on this device. They won't show up on your partner's phone, and clearing your browser data would erase them, so make a backup below every so often. For one shared plan that syncs between both of you, deploy the planner together with its sync function.</p>
+        ) : (
+          <p className="text-sm wp-mut leading-relaxed">Everything saves automatically to your planner's shared storage. Open the same link on your partner's phone{st && st.passProtected ? " and enter the passcode" : ""} and you'll both see and edit the same plan, with changes syncing about once a minute. If you both edit the same section at the exact same moment, the last save wins.</p>
+        )}
+        {!local && st && !st.passProtected && <p className="text-xs wp-mut mt-2">Anyone with the link can open the planner, so keep it between the two of you.</p>}
+        <div className="flex items-center gap-3 mt-4 flex-wrap">
+          <SyncBadge />
+          {!local && <Btn kind="soft" className="wp-btn-sm" onClick={() => pull(true)}><Ic n="RefreshCw" size={14} />Sync now</Btn>}
+          {st && st.passProtected && <Btn kind="ghost" className="wp-btn-sm" onClick={() => st.signOut()}><Ic n="Lock" size={14} />Lock this device</Btn>}
+        </div>
+      </Card>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="serif text-2xl font-semibold mb-2">Backup</h2>
+        <p className="text-sm wp-mut mb-3">Copy a backup of your plans (moodboard photos aren't included, they're too large).</p>
+        {!showExp ? <Btn kind="ghost" onClick={() => setShowExp(true)}><Ic n="Download" size={15} />Create backup</Btn> : (
+          <div className="space-y-2"><textarea ref={taRef} readOnly className="wp-input num" rows={5} value={exportText} style={{ fontSize: 12 }} /><Btn kind="soft" onClick={copy}>Copy backup</Btn></div>
+        )}
+        <div className="mt-5"><Field label="Restore from a backup"><textarea className="wp-input" rows={3} value={imp} onChange={(e) => setImp(e.target.value)} placeholder="Paste backup text here" style={{ fontSize: 13 }} /></Field><Btn kind="ghost" className="mt-2" onClick={doImport} disabled={!imp.trim()}>Import</Btn></div>
+      </Card>
+      <Card className="p-5 md:p-6">
+        <h2 className="serif text-2xl font-semibold mb-3">Starter content & reset</h2>
+        <div className="flex gap-2 flex-wrap">
+          <Btn kind="ghost" onClick={addStarter}><Ic n="ListChecks" size={15} />Add starter checklist</Btn>
+          <Btn kind="danger" onClick={() => ask({ title: "Reset the whole planner?", msg: `This permanently deletes all tasks, budget, guests, vendors, timeline and moodboard images${local ? " saved on this device" : " for both of you"}. Consider making a backup first.`, yes: "Reset everything", danger: true, onYes: resetAll })}><Ic n="Trash2" size={15} />Reset everything</Btn>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function Setup() {
+  const { db, update } = useApp();
+  const s = db.settings;
+  const [f, setF] = useState({ bride: s.bride, groom: s.groom, date: s.date, time: s.time, currency: s.currency, plan: s.plan, budget: "" });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const days = diffDays(today(), f.date);
+  const finish = (skip) => {
+    if (skip) return update("settings", { ...s, setupDone: true });
+    const old = s.date, nd = f.date || old;
+    update("settings", { ...s, bride: f.bride.trim(), groom: f.groom.trim(), date: nd, time: f.time, currency: f.currency, plan: f.plan, setupDone: true });
+    if (nd !== old) update("tasks", (ts) => respace(ts, old, nd));
+    if (num(f.budget) > 0) update("budget", (b) => ({ ...b, funds: [...b.funds, { id: uid(), name: "Our wedding fund", amount: num(f.budget) }] }));
+    if (f.plan === "venue") update("timeline", (t) => ({ ...t, items: mkTL("venue") }));
+  };
+  return (
+    <div className="wp-overlay" style={{ zIndex: 85 }}>
+      <div className="wp-sheet">
+        <div className="wp-hero" style={{ borderRadius: 0, padding: "1.6rem 1.5rem", flexShrink: 0 }}>
+          <Leaf className="wp-float" style={{ position: "absolute", right: -20, top: -30, width: 170, height: 170, color: "rgba(235,214,168,.4)" }} />
+          <div className="relative">
+            <div className="text-xs uppercase tracking-widest gold">Welcome 💍</div>
+            <h2 className="serif text-4xl font-semibold leading-tight mt-1">Let's plan your big day</h2>
+            <p className="text-sm mt-1" style={{ opacity: 0.88 }}>A few details to set things up. You can change any of this later in Settings.</p>
+          </div>
+        </div>
+        <div className="wp-sheet-body space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Bride's name"><input className="wp-input" value={f.bride} onChange={set("bride")} placeholder="First name" /></Field>
+            <Field label="Groom's name"><input className="wp-input" value={f.groom} onChange={set("groom")} placeholder="First name" /></Field>
+            <Field label="Wedding date"><input type="date" className="wp-input" value={f.date} onChange={set("date")} /></Field>
+            <Field label="Ceremony time"><input type="time" className="wp-input" value={f.time} onChange={set("time")} /></Field>
+          </div>
+          {days > 0 && days <= 45 && <div className="wp-note">That's only <b>{days} days</b> away, so your starter checklist is on a fast-track schedule.{days <= 21 ? " If you meant a later year, just change the date." : ""}</div>}
+          <Field label="Ceremony plan"><select className="wp-input" value={f.plan} onChange={set("plan")}>{Object.entries(PLANS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Currency"><select className="wp-input" value={f.currency} onChange={set("currency")}>{Object.keys(CUR).map((c) => <option key={c}>{c}</option>)}</select></Field>
+            <Field label="Total budget (optional)"><input type="number" inputMode="decimal" className="wp-input" value={f.budget} onChange={set("budget")} placeholder="0" /></Field>
+          </div>
+        </div>
+        <div className="px-5 pt-3 flex items-center gap-2" style={{ borderTop: "1px solid var(--line)", paddingBottom: "calc(.9rem + env(safe-area-inset-bottom))" }}>
+          <button className="text-sm wp-mut" onClick={() => finish(true)}>Skip for now</button>
+          <div className="flex-1" />
+          <Btn onClick={() => finish(false)}>Start planning<Ic n="ChevronRight" size={16} /></Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SyncBadge() {
+  const { sync, pull } = useApp();
+  const local = isLocal();
+  const map = { saved: local ? ["HardDrive|Save", "Saved on this device", "var(--sd)"] : ["Cloud", "All changes saved", "var(--sd)"], saving: ["RefreshCw", "Saving…", "#A07A3C"], loading: ["RefreshCw", "Loading…", "var(--mut)"], error: ["CloudOff", "Not saving · tap to retry", "var(--red)"], local: ["CloudOff", "Preview only · not saving", "var(--red)"] };
+  const [icon, label, color] = map[sync] || map.saved;
+  return (
+    <button onClick={() => pull(true)} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full" style={{ color, background: "rgba(255,255,255,.75)", border: "1px solid var(--line)" }} title={local ? "Saved in this browser" : "Sync now"}>
+      <Ic n={icon} size={14} className={sync === "saving" || sync === "loading" ? "wp-spin" : ""} /><span>{label}</span>
+    </button>
+  );
+}
+
+/* ───────── error safety net ───────── */
+class Boundary extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err) { console.error(err); }
+  render() {
+    if (!this.state.err) return this.props.children;
+    return (
+      <div className="wp flex items-center justify-center p-6" style={{ minHeight: "100vh" }}>
+        <style>{CSS}</style><div className="wp-bg" />
+        <div className="wp-card p-6 text-center" style={{ maxWidth: 420 }}>
+          <div style={{ fontSize: 40 }}>💍</div>
+          <div className="serif text-3xl font-semibold mt-2">Something went wrong</div>
+          <p className="text-sm wp-mut mt-2">Anything already saved is safe. Refresh the page to carry on.</p>
+          <p className="text-xs wp-mut mt-2" style={{ wordBreak: "break-word" }}>{String((this.state.err && this.state.err.message) || this.state.err)}</p>
+          <button className="wp-btn wp-btn-primary mt-4" onClick={() => location.reload()}>Refresh</button>
+        </div>
+      </div>
+    );
+  }
+}
+
+/* ───────── app ───────── */
+const NAV = [
+  { id: "home", label: "Dashboard", short: "Home", icon: "House|Home" },
+  { id: "tasks", label: "Tasks", short: "Tasks", icon: "ListChecks" },
+  { id: "budget", label: "Budget", short: "Budget", icon: "Wallet" },
+  { id: "mood", label: "Moodboard", short: "Mood", icon: "Image" },
+  { id: "guests", label: "Guests & RSVPs", short: "Guests", icon: "Users" },
+  { id: "vendors", label: "Vendors & Venues", short: "Vendors", icon: "Store" },
+  { id: "day", label: "Wedding Day", short: "Day plan", icon: "Clock" },
+  { id: "settings", label: "Settings", short: "Settings", icon: "Settings" },
+];
+const MOBILE_MAIN = ["home", "tasks", "budget", "mood"];
+
+function WeddingPlanner() {
+  const [db, setDb] = useState(null);
+  const dbRef = useRef(null);
+  const [sync, setSync] = useState("loading");
+  const [loadErr, setLoadErr] = useState(false);
+  const [view, setView] = useState("home");
+  const [more, setMore] = useState(false);
+  const [toastMsg, setToastMsg] = useState(null);
+  const [confirmBox, setConfirmBox] = useState(null);
+  const [imgs, setImgs] = useState({});
+  const R = useRef({ canWrite: false, dirty: {}, timers: {}, last: {} });
+  const tRef = useRef(null);
+  const loadingImgs = useRef(new Set());
+
+  const toast = (m) => { setToastMsg({ m, k: Date.now() }); clearTimeout(tRef.current); tRef.current = setTimeout(() => setToastMsg(null), 2600); };
+  const ask = (o) => setConfirmBox(o);
+  const refreshStatus = () => { if (R.current.canWrite) setSync(Object.values(R.current.dirty).some(Boolean) ? "saving" : "saved"); };
+
+  const flush = async (sec) => {
+    const st = store(), r = R.current;
+    if (!st || !r.canWrite) return;
+    clearTimeout(r.timers[sec]);
+    const json = JSON.stringify(dbRef.current[sec]);
+    try {
+      const res = await st.set(KEYS[sec], json, true);
+      if (!res) throw new Error("save failed");
+      r.last[sec] = json;
+      if (JSON.stringify(dbRef.current[sec]) === json) r.dirty[sec] = false;
+      refreshStatus();
+    } catch (e) { setSync("error"); }
+  };
+  const schedule = (sec) => {
+    const r = R.current;
+    r.dirty[sec] = true;
+    clearTimeout(r.timers[sec]);
+    r.timers[sec] = setTimeout(() => flush(sec), 700);
+    if (r.canWrite) setSync("saving");
+  };
+  const update = (sec, fn) => {
+    const val = typeof fn === "function" ? fn(dbRef.current[sec]) : fn;
+    dbRef.current = { ...dbRef.current, [sec]: val };
+    setDb(dbRef.current);
+    schedule(sec);
+  };
+  const replaceAll = (data) => { dbRef.current = data; setDb(data); Object.keys(KEYS).forEach(schedule); };
+
+  const load = async () => {
+    const st = store(), data = {}, missing = [];
+    if (!st) { Object.keys(KEYS).forEach((k) => { data[k] = FRESH[k](); }); dbRef.current = data; setDb(data); setSync("local"); return; }
+    let vals = null;
+    for (let i = 0; i < 3 && !vals; i++) {
+      try { vals = await readAll(st); } catch (e) { await sleep(700); }
+    }
+    if (vals) {
+      Object.entries(KEYS).forEach(([sec, key]) => {
+        const v = vals[key];
+        if (typeof v === "string") {
+          try { data[sec] = normalize(sec, JSON.parse(v)); R.current.last[sec] = v; } catch (e) { missing.push(sec); }
+        } else missing.push(sec);
+      });
+    }
+    Object.keys(KEYS).forEach((k) => { if (!data[k]) data[k] = FRESH[k](); });
+    dbRef.current = data; setDb(data);
+    if (!vals) { setLoadErr(true); setSync("error"); return; }
+    setLoadErr(false);
+    R.current.canWrite = true; setSync("saved");
+    missing.forEach((sec) => sec !== "settings" && schedule(sec));
+  };
+
+  const pull = async (manual) => {
+    const st = store(), r = R.current;
+    if (!st) { if (manual) toast("Saving isn't available in this preview"); return; }
+    if (!r.canWrite) { if (manual) { setSync("loading"); await load(); } return; }
+    const secs = Object.keys(KEYS);
+    for (const sec of secs) if (r.dirty[sec]) await flush(sec);
+    let vals;
+    try {
+      const want = secs.filter((sec) => !r.dirty[sec]).map((sec) => KEYS[sec]);
+      if (st.getMany) vals = await st.getMany(want);
+      else { vals = {}; for (const k of want) { const res = await st.get(k, true); vals[k] = res && res.value; } }
+    } catch (e) { if (manual) toast("Couldn't reach your saved plans. Try again in a moment"); return; }
+    for (const sec of secs) {
+      const v = vals[KEYS[sec]];
+      if (typeof v === "string" && v !== r.last[sec] && !r.dirty[sec]) {
+        try { const parsed = normalize(sec, JSON.parse(v)); r.last[sec] = v; dbRef.current = { ...dbRef.current, [sec]: parsed }; } catch (e) { /* ignore bad data */ }
+      }
+    }
+    setDb(dbRef.current);
+    if (manual) toast("Up to date ✓");
+  };
+
+  const saveImg = async (id, data) => {
+    setImgs((p) => ({ ...p, [id]: data }));
+    const st = store();
+    if (!st || !R.current.canWrite) return true;
+    try { return !!(await st.set(IMGK(id), data, true)); } catch (e) { return false; }
+  };
+  const delImg = async (id) => {
+    setImgs((p) => { const n = { ...p }; delete n[id]; return n; });
+    const st = store();
+    if (st && R.current.canWrite) { try { await st.delete(IMGK(id), true); } catch (e) { /* ignore */ } }
+  };
+  const resetAll = async () => {
+    const st = store();
+    if (st && R.current.canWrite) {
+      try { const r = await st.list(PFX, true); const ks = ((r && r.keys) || []).map((k) => (typeof k === "string" ? k : k.key)); for (const k of ks) { try { await st.delete(k, true); } catch (e) { /* ignore */ } } } catch (e) { /* ignore */ }
+    }
+    R.current.last = {}; R.current.dirty = {};
+    const data = {}; Object.keys(KEYS).forEach((k) => { data[k] = FRESH[k](); });
+    dbRef.current = data; setDb(data); setImgs({}); loadingImgs.current = new Set();
+    Object.keys(KEYS).filter((k) => k !== "settings").forEach(schedule);
+    setView("home"); toast("Planner reset");
+  };
+
+  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!db) return;
+    const iv = setInterval(() => { if (!document.hidden) pull(false); }, 60000);
+    const onVis = () => { if (document.hidden) Object.keys(KEYS).forEach((k) => R.current.dirty[k] && flush(k)); else pull(false); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(iv); document.removeEventListener("visibilitychange", onVis); };
+  }, [!!db]);
+  useEffect(() => {
+    if (!db) return;
+    const st = store();
+    if (!st) return;
+    const queue = db.mood.items.filter((i) => i.hasImg && imgs[i.id] === undefined && !loadingImgs.current.has(i.id)).map((i) => i.id);
+    if (!queue.length) return;
+    queue.forEach((id) => loadingImgs.current.add(id));
+    const worker = async () => {
+      while (queue.length) {
+        const id = queue.shift();
+        try { const r = await st.get(IMGK(id), true); setImgs((p) => ({ ...p, [id]: r && r.value ? r.value : "missing" })); }
+        catch (e) { setImgs((p) => ({ ...p, [id]: "missing" })); }
+      }
+    };
+    worker(); worker(); worker();
+  }, [db && db.mood.items]);
+  useEffect(() => { if (db) document.title = `${coupleName(db.settings)} · Wedding Planner`; }, [db && db.settings]);
+
+  if (!db) return (
+    <div className="wp flex items-center justify-center" style={{ minHeight: "100vh" }}>
+      <style>{CSS}</style><div className="wp-bg" />
+      <div className="text-center"><div className="wp-float" style={{ fontSize: 46 }}>💍</div><div className="serif text-3xl font-semibold mt-3">Opening your planner…</div></div>
+    </div>
+  );
+
+  const s = db.settings;
+  const daysTo = diffDays(today(), s.date);
+  const overdueN = db.tasks.filter((x) => !x.done && x.due && x.due < today()).length;
+  const go = (v) => { setView(v); setMore(false); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); } };
+  const ctx = { db, update, toast, ask, go, money: (n) => money(n, s.currency), imgs, saveImg, delImg, pull, sync, replaceAll, resetAll };
+  const V = { home: <Dashboard />, tasks: <Tasks />, budget: <Budget />, mood: <Mood />, guests: <Guests />, vendors: <Vendors />, day: <DayPlan />, settings: <SettingsView /> };
+  const daysLabel = daysTo > 0 ? `${daysTo} day${daysTo === 1 ? "" : "s"} to go` : daysTo === 0 ? "Today's the day!" : "Married ♥";
+  const headIcon = sync === "error" || sync === "local" ? "CloudOff" : sync === "saving" || sync === "loading" ? "RefreshCw" : isLocal() ? "HardDrive|Save" : "Cloud";
+
+  return (
+    <Ctx.Provider value={ctx}>
+      <div className="wp">
+        <style>{CSS}</style>
+        <div className="wp-bg" />
+        <aside className="wp-side hidden md:flex flex-col">
+          <div className="px-6 pt-7 pb-6">
+            <div className="text-xs uppercase tracking-widest" style={{ color: "var(--gold)" }}>Wedding planner</div>
+            <div className="serif text-3xl font-semibold leading-tight mt-1">{coupleName(s)}</div>
+            <div className="text-sm wp-mut mt-1">{fmtD(s.date, { day: "numeric", month: "long", year: "numeric" })}</div>
+          </div>
+          <nav className="px-3 flex flex-col gap-1">
+            {NAV.map((n) => (
+              <button key={n.id} className={`wp-nav-item ${view === n.id ? "on" : ""}`} onClick={() => go(n.id)}>
+                <Ic n={n.icon} size={18} /><span className="flex-1">{n.label}</span>
+                {n.id === "tasks" && overdueN > 0 && <span className="wp-badge">{overdueN}</span>}
+              </button>
+            ))}
+          </nav>
+          <div className="mt-auto p-4">
+            <div className="rounded-2xl p-4 mb-3 relative overflow-hidden" style={{ background: "linear-gradient(135deg,#3B5647,#7E9C88)", color: "#FBF6EC" }}>
+              <Leaf style={{ position: "absolute", right: -20, bottom: -30, width: 110, height: 110, color: "rgba(235,214,168,.35)" }} />
+              <div className="serif text-4xl font-semibold leading-none relative" style={{ color: "#EBD6A8" }}>{daysTo > 0 ? daysTo : "♥"}</div>
+              <div className="text-xs uppercase tracking-widest mt-1 relative" style={{ opacity: 0.88 }}>{daysTo > 0 ? (daysTo === 1 ? "day to go" : "days to go") : daysLabel}</div>
+            </div>
+            <SyncBadge />
+          </div>
+        </aside>
+
+        <header className="md:hidden sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3" style={{ background: "rgba(250,247,242,.9)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid var(--line)" }}>
+          <div className="min-w-0"><div className="serif text-xl font-semibold truncate leading-tight">{coupleName(s)}</div><div className="text-xs" style={{ color: "var(--gold)" }}>{daysLabel}</div></div>
+          <button onClick={() => pull(true)} className="wp-icon-btn" aria-label="Sync" style={{ color: sync === "error" || sync === "local" ? "var(--red)" : sync === "saving" ? "#A07A3C" : "var(--sd)" }}>
+            <Ic n={headIcon} size={18} className={sync === "saving" ? "wp-spin" : ""} />
+          </button>
+        </header>
+
+        <main className="md:ml-64">
+          <div className="max-w-6xl mx-auto px-4 md:px-8 pt-4 md:pt-8 pb-32 md:pb-12">
+            {loadErr && <div className="wp-alert mb-4 flex-wrap"><Ic n="CloudOff" size={16} /><span className="flex-1">Couldn't reach your saved plans, so changes won't be saved right now.</span><button className="font-medium underline" onClick={() => pull(true)}>Retry</button></div>}
+            <div key={view} className="wp-fade">{V[view]}</div>
+          </div>
+        </main>
+
+        <nav className="wp-bottom md:hidden flex">
+          {MOBILE_MAIN.map((id) => { const n = NAV.find((x) => x.id === id); return (
+            <button key={id} className={`wp-tab ${view === id ? "on" : ""}`} onClick={() => go(id)}>
+              <span className="relative"><Ic n={n.icon} size={21} />{id === "tasks" && overdueN > 0 && <span style={{ position: "absolute", top: -2, right: -4, width: 8, height: 8, borderRadius: 99, background: "var(--red)" }} />}</span>
+              <span>{n.short}</span>
+            </button>
+          ); })}
+          <button className={`wp-tab ${!MOBILE_MAIN.includes(view) ? "on" : ""}`} onClick={() => setMore(true)}><Ic n="MoreHorizontal|Ellipsis" size={21} /><span>More</span></button>
+        </nav>
+
+        {more && (
+          <Modal onClose={() => setMore(false)} title="More">
+            <div className="grid grid-cols-2 gap-3 pb-2">
+              {NAV.filter((n) => !MOBILE_MAIN.includes(n.id)).map((n) => (
+                <button key={n.id} className="wp-card hov p-4 text-left flex flex-col gap-3" style={view === n.id ? { borderColor: "var(--sage)" } : undefined} onClick={() => go(n.id)}>
+                  <span className="wp-ico"><Ic n={n.icon} size={16} /></span><span className="font-medium text-sm">{n.label}</span>
+                </button>
+              ))}
+            </div>
+          </Modal>
+        )}
+        {!s.setupDone && <Setup />}
+        <Confirm box={confirmBox} onClose={() => setConfirmBox(null)} />
+        {toastMsg && <div key={toastMsg.k} className="wp-toast">{toastMsg.m}</div>}
+      </div>
+    </Ctx.Provider>
+  );
+}
+
+/* ───────── start ───────── */
+window.plannerReady.then(() => {
+  const el = document.getElementById("root");
+  el.innerHTML = "";
+  ReactDOM.createRoot(el).render(<Boundary><WeddingPlanner /></Boundary>);
+});
+})();
+</script>
+</body>
+</html>
